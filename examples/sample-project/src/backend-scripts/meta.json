@@ -1,0 +1,34 @@
+{
+  "scope": "backend-scripts",
+  "generatedAt": "2026-01-01T10:00:00.000Z",
+  "itemCount": 1,
+  "items": [
+    {
+      "id": "data-processor",
+      "name": "Data Processor",
+      "type": "backend-script",
+      "file": "data-processor.js",
+      "metadata": {
+        "description": "Processes user data and generates analytics reports",
+        "version": "1.2.0",
+        "author": "developer@company.com",
+        "tags": ["data-processing", "analytics", "automation"],
+        "entryPoint": "processUserData",
+        "dependencies": ["lodash", "moment"],
+        "permissions": ["read", "write"],
+        "schedule": {
+          "enabled": true,
+          "cron": "0 2 * * *",
+          "timezone": "UTC"
+        },
+        "timeout": 300,
+        "memory": 512,
+        "retryPolicy": {
+          "maxRetries": 3,
+          "retryDelay": 1000,
+          "exponentialBackoff": true
+        }
+      }
+    }
+  ]
+}

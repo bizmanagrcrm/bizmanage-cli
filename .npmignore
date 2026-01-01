@@ -1,0 +1,79 @@
+# Source files (only dist should be published)
+src/
+tests/
+examples/
+
+# Development files
+tsconfig.json
+jest.config.js
+.eslintrc.js
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output/
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.test
+.env.production
+.env.local
+
+# Cache files
+.cache/
+
+# Build info
+*.tsbuildinfo
+
+# GitHub files
+.github/
+
+# Documentation that shouldn't be in package
+CONTRIBUTING.md
+PROJECT_STRUCTURE.md
+
+# Development scripts
+scripts/
