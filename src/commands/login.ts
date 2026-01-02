@@ -3,13 +3,15 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { AuthService } from '../services/auth.js';
+import { BizmanageService } from '../services/bizmanage.js';
 
 export const loginCommand = new Command()
   .name('login')
-  .description('Login to Bizmanage platform')
+  .description('Login to Bizmanage platform by saving API key and testing authentication')
   .option('-a, --alias <alias>', 'Configuration alias (default: default)', 'default')
   .action(async (options) => {
     console.log(chalk.blue('🔐 Bizmanage CLI Login'));
+    console.log(chalk.dim('This will save your API key and test authentication using /restapi/ping'));
     console.log();
 
     try {
@@ -25,7 +27,7 @@ export const loginCommand = new Command()
               new URL(input);
               return true;
             } catch {
-              return 'Please enter a valid URL';
+              return 'Please enter a valid URL (e.g., https://your-instance.bizmanage.com)';
             }
           }
         },
@@ -37,51 +39,65 @@ export const loginCommand = new Command()
         }
       ]);
 
-      const spinner = ora('Validating credentials...').start();
+      // Test authentication before saving
+      console.log();
+      const spinner = ora('Testing authentication with /restapi/ping...').start();
 
-      // Simulate API call to validate credentials
-      const isValid = await simulateAuthValidation(answers.instanceUrl, answers.apiKey);
+      const bizmanageService = new BizmanageService({
+        instanceUrl: answers.instanceUrl,
+        apiKey: answers.apiKey
+      });
 
-      if (isValid) {
-        spinner.succeed('Credentials validated successfully!');
+      const pingResult = await bizmanageService.ping();
+
+      if (pingResult.authenticated) {
+        spinner.succeed(chalk.green('Authentication successful! ✅'));
         
-        // Save credentials using AuthService
+        // Save API key and configuration
         const authService = new AuthService();
         await authService.saveConfig(options.alias, {
           instanceUrl: answers.instanceUrl,
           apiKey: answers.apiKey
         });
 
-        console.log(chalk.green(`✅ Logged in successfully as alias: ${chalk.bold(options.alias)}`));
-        console.log(chalk.dim(`Config saved to: ${authService.getConfigPath()}`));
+        console.log();
+        console.log(chalk.green(`🎉 Login successful!`));
+        console.log(chalk.green(`   Alias: ${chalk.bold(options.alias)}`));
+        console.log(chalk.green(`   API Key: Saved securely`));
+        console.log(chalk.dim(`   Config location: ${authService.getConfigPath()}`));
+        console.log();
+        console.log(chalk.blue(`💡 Use 'bizmanage test' to verify your connection anytime`));
+        console.log(chalk.blue(`💡 Use 'bizmanage logout' to remove saved credentials`));
       } else {
-        spinner.fail('Invalid credentials');
-        console.log(chalk.red('❌ Login failed. Please check your Instance URL and API Key.'));
+        spinner.fail(chalk.red('Authentication failed ❌'));
+        console.log();
+        console.log(chalk.red(`Error: ${pingResult.message}`));
+        
+        // Provide helpful suggestions based on error type
+        if (pingResult.status === 403) {
+          console.log(chalk.yellow('💡 Suggestions:'));
+          console.log(chalk.yellow('   • Check if your API key is correct'));
+          console.log(chalk.yellow('   • Verify the API key has proper permissions'));
+          console.log(chalk.yellow('   • Make sure the API key hasn\'t expired'));
+        } else if (pingResult.status === 404) {
+          console.log(chalk.yellow('💡 Suggestions:'));
+          console.log(chalk.yellow('   • Verify your instance URL is correct'));
+          console.log(chalk.yellow('   • Check if the /restapi/ping endpoint exists'));
+        } else if (pingResult.status === 0) {
+          console.log(chalk.yellow('💡 Suggestions:'));
+          console.log(chalk.yellow('   • Check your internet connection'));
+          console.log(chalk.yellow('   • Verify the instance URL is reachable'));
+        }
+        
+        console.log();
+        console.log(chalk.red('❌ API key NOT saved - authentication must succeed first'));
         process.exit(1);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.log();
       console.log(chalk.red(`❌ Login failed: ${errorMessage}`));
+      console.log(chalk.red('❌ API key NOT saved'));
       process.exit(1);
     }
   });
-
-/**
- * Simulate API call to validate authentication
- * In real implementation, this would make an actual API call using axios
- */
-async function simulateAuthValidation(instanceUrl: string, apiKey: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    // Simulate network delay
-    setTimeout(() => {
-      // Mock validation logic - in real implementation:
-      // const response = await axios.get(`${instanceUrl}/api/auth/validate`, {
-      //   headers: { Authorization: `Bearer ${apiKey}` }
-      // });
-      // resolve(response.status === 200);
-      
-      // For demo, accept any non-empty values
-      resolve(instanceUrl.length > 0 && apiKey.length > 0);
-    }, 1500);
-  });
-}

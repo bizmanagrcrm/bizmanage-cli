@@ -103,20 +103,64 @@ export class ApiService {
   }
 
   /**
-   * Test API connection and authentication
+   * Test API connection and authentication using the ping endpoint
    */
-  async testConnection(): Promise<boolean> {
+  async testConnection(): Promise<{ success: boolean; status?: number; message?: string }> {
     try {
-      // In real implementation:
-      // const response = await this.client.get('/api/auth/validate');
-      // return response.status === 200;
+      const response = await this.client.get('/restapi/ping');
+      
+      if (response.status === 200) {
+        return { 
+          success: true, 
+          status: 200, 
+          message: 'Authentication successful' 
+        };
+      } else {
+        return { 
+          success: false, 
+          status: response.status, 
+          message: `Unexpected response status: ${response.status}` 
+        };
+      }
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        return { 
+          success: false, 
+          status: 403, 
+          message: 'Authentication failed - invalid credentials' 
+        };
+      }
+      
+      return { 
+        success: false, 
+        status: error.response?.status || 0, 
+        message: error.message || 'Connection failed' 
+      };
+    }
+  }
 
-      // Mock validation - always return true for demo
-      return new Promise((resolve) => {
-        setTimeout(() => resolve(true), 500);
-      });
-    } catch (error) {
-      return false;
+  /**
+   * Test authentication by pinging the Bizmanage API
+   */
+  async ping(): Promise<{ authenticated: boolean; status: number; message: string }> {
+    try {
+      const response = await this.client.get('/restapi/ping');
+      
+      return {
+        authenticated: response.status === 200,
+        status: response.status,
+        message: response.status === 200 ? 'Authenticated' : 'Authentication failed'
+      };
+    } catch (error: any) {
+      const status = error.response?.status || 0;
+      
+      return {
+        authenticated: false,
+        status,
+        message: status === 403 
+          ? 'Not authenticated - invalid or missing credentials'
+          : `Connection error: ${error.message}`
+      };
     }
   }
 }

@@ -4,6 +4,8 @@ import { loginCommand } from './commands/login.js';
 import { logoutCommand } from './commands/logout.js';
 import { pullCommand } from './commands/pull.js';
 import { pushCommand } from './commands/push.js';
+import { createTestCommand } from './commands/test.js';
+import { statusCommand } from './commands/status.js';
 
 const program = new Command();
 
@@ -16,6 +18,8 @@ export function cli() {
   // Add commands
   program.addCommand(loginCommand);
   program.addCommand(logoutCommand);
+  program.addCommand(statusCommand);
+  program.addCommand(createTestCommand());
   program.addCommand(pullCommand);
   program.addCommand(pushCommand);
 

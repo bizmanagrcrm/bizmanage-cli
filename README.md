@@ -56,11 +56,16 @@ npm link
 
 ### `bizmanage login`
 
-Authenticate with your Bizmanage platform instance.
+Save your API key and test authentication with the Bizmanage platform.
 
 ```bash
 bizmanage login [options]
 ```
+
+**How it works:**
+1. Prompts for your Instance URL and API Key
+2. Tests authentication using `GET /restapi/ping`
+3. Saves API key securely only if authentication succeeds
 
 **Options:**
 - `-a, --alias <alias>` - Configuration alias (default: "default")
@@ -77,15 +82,19 @@ bizmanage login --alias development
 
 ### `bizmanage logout`
 
-Remove stored authentication credentials.
+Delete saved API key and authentication configuration.
 
 ```bash
 bizmanage logout [options]
 ```
 
+**How it works:**
+1. Removes the saved API key from secure storage
+2. Deletes all associated configuration data
+
 **Options:**
 - `-a, --alias <alias>` - Configuration alias to remove (default: "default")
-- `--all` - Remove all stored configurations
+- `--all` - Remove all saved API keys and configurations
 
 **Examples:**
 ```bash
@@ -95,9 +104,58 @@ bizmanage logout
 # Logout from specific alias
 bizmanage logout --alias production
 
-# Remove all stored configurations
+# Remove all saved API keys
 bizmanage logout --all
 ```
+
+### `bizmanage status`
+
+Show current login status and saved API keys.
+
+```bash
+bizmanage status
+```
+
+**Shows:**
+- All saved configuration aliases
+- Instance URLs for each alias
+- Masked API keys (for security)
+
+**Example:**
+```bash
+bizmanage status
+```
+
+### `bizmanage test`
+
+Test authentication and connection to the Bizmanage API.
+
+```bash
+bizmanage test [options]
+```
+
+**Options:**
+- `-a, --alias <alias>` - Test specific alias configuration (default: "default")
+- `--ping-only` - Only run the ping test without detailed report
+- `--verbose` - Show verbose output
+
+**Examples:**
+```bash
+# Test default configuration
+bizmanage test
+
+# Test specific alias
+bizmanage test --alias production
+
+# Quick ping test only
+bizmanage test --ping-only
+
+# Verbose output with configuration details
+bizmanage test --verbose
+```
+
+**API Endpoint Tested:**
+- `GET /restapi/ping` - Returns 200 if authenticated, 403 if not authenticated
 
 ### `bizmanage pull`
 
