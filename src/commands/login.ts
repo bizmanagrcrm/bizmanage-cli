@@ -4,18 +4,23 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { AuthService } from '../services/auth.js';
 import { BizmanageService } from '../services/bizmanage.js';
+import { logger } from '../utils/logger.js';
 
 export const loginCommand = new Command()
   .name('login')
   .description('Login to Bizmanage platform by saving API key and testing authentication')
   .option('-a, --alias <alias>', 'Configuration alias (default: default)', 'default')
   .action(async (options) => {
+    const commandLogger = logger.child('login');
+    commandLogger.debug('Starting login command', { alias: options.alias });
+    
     console.log(chalk.blue('🔐 Bizmanage CLI Login'));
     console.log(chalk.dim('This will save your API key and test authentication using /restapi/ping'));
     console.log();
 
     try {
       // Prompt for credentials
+      commandLogger.debug('Prompting user for credentials');
       const answers = await inquirer.prompt([
         {
           type: 'input',
@@ -39,6 +44,11 @@ export const loginCommand = new Command()
         }
       ]);
 
+      commandLogger.debug('Credentials collected', { 
+        instanceUrl: answers.instanceUrl,
+        hasApiKey: !!answers.apiKey 
+      });
+
       // Test authentication before saving
       console.log();
       const spinner = ora('Testing authentication with /restapi/ping...').start();
@@ -52,12 +62,18 @@ export const loginCommand = new Command()
 
       if (pingResult.authenticated) {
         spinner.succeed(chalk.green('Authentication successful! ✅'));
+        commandLogger.info('Authentication successful, saving configuration');
         
         // Save API key and configuration
         const authService = new AuthService();
         await authService.saveConfig(options.alias, {
           instanceUrl: answers.instanceUrl,
           apiKey: answers.apiKey
+        });
+
+        commandLogger.success('Login completed successfully', {
+          alias: options.alias,
+          instanceUrl: answers.instanceUrl
         });
 
         console.log();
@@ -70,6 +86,11 @@ export const loginCommand = new Command()
         console.log(chalk.blue(`💡 Use 'bizmanage logout' to remove saved credentials`));
       } else {
         spinner.fail(chalk.red('Authentication failed ❌'));
+        commandLogger.warn('Authentication failed', {
+          status: pingResult.status,
+          message: pingResult.message
+        });
+        
         console.log();
         console.log(chalk.red(`Error: ${pingResult.message}`));
         
@@ -95,6 +116,11 @@ export const loginCommand = new Command()
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      commandLogger.error('Login command failed', {
+        error: errorMessage,
+        alias: options.alias
+      });
+      
       console.log();
       console.log(chalk.red(`❌ Login failed: ${errorMessage}`));
       console.log(chalk.red('❌ API key NOT saved'));

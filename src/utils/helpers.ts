@@ -1,6 +1,7 @@
 /**
  * Utility functions for the bizmanage-cli
  */
+export { logger, LogLevel, setLogLevel, getLogLevel } from './logger.js';
 
 /**
  * Sleep for a specified number of milliseconds

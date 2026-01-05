@@ -400,6 +400,54 @@ npm install -g bizmanage-cli@beta
 
 ## Configuration
 
+### Verbosity and Debugging
+
+The CLI supports multiple verbosity levels to help with debugging and development:
+
+```bash
+# Default logging (INFO level) - shows basic operations
+bizmanage login
+
+# Silent mode - only shows errors
+bizmanage login --silent
+
+# Verbose mode - shows INFO level messages
+bizmanage login -v
+bizmanage login --verbose
+
+# Very verbose mode - shows DEBUG level messages (includes HTTP requests/responses)
+bizmanage login -vv
+bizmanage login --very-verbose
+
+# Extra verbose mode - shows TRACE level messages (maximum detail)
+bizmanage login -vvv
+bizmanage login --extra-verbose
+
+# Debug mode - same as very verbose, useful for development
+bizmanage login --debug
+
+# Include timestamps in log output
+bizmanage login --log-timestamps
+
+# Combine options for detailed debugging
+bizmanage login -vv --log-timestamps
+```
+
+**Log Levels:**
+- **ERROR** (`--silent`): Only critical errors
+- **WARN** (default): Errors and warnings
+- **INFO** (`-v`): Errors, warnings, and informational messages
+- **DEBUG** (`-vv`, `--debug`): All above plus HTTP requests/responses, service details
+- **TRACE** (`-vvv`): Maximum verbosity including internal operations
+
+**Features:**
+- Built on [Winston](https://github.com/winstonjs/winston) for robust logging
+- Automatic header sanitization for security (API keys are redacted)
+- Color-coded output for easy reading
+- Structured data logging in JSON format for complex objects
+- Response time tracking for API calls
+- Child loggers with prefixes for different services
+
 The CLI stores authentication configurations in `~/.bizmanage/config.json`. This allows you to manage multiple environments:
 
 ```json

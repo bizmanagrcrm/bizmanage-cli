@@ -1,6 +1,7 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, AxiosRequestConfig } from 'axios';
 import chalk from 'chalk';
 import { AuthConfig } from './auth.js';
+import { logger } from '../utils/logger.js';
 
 export interface BizmanagePingResponse {
   authenticated: boolean;
@@ -19,9 +20,15 @@ export interface BizmanageConnectionTest {
 export class BizmanageService {
   private client: AxiosInstance;
   private config: AuthConfig;
+  private serviceLogger = logger.child('BizmanageService');
 
   constructor(config: AuthConfig) {
     this.config = config;
+    this.serviceLogger.debug('Initializing BizmanageService', {
+      instanceUrl: config.instanceUrl,
+      hasApiKey: !!config.apiKey
+    });
+    
     this.client = axios.create({
       baseURL: config.instanceUrl,
       headers: {
@@ -30,6 +37,58 @@ export class BizmanageService {
       },
       timeout: 10000
     });
+
+    // Add request interceptor for logging
+    this.client.interceptors.request.use(
+      (config) => {
+        // Add timestamp for response time calculation
+        (config as any).requestStartTime = Date.now();
+        
+        this.serviceLogger.logRequest(
+          config.method?.toUpperCase() || 'UNKNOWN',
+          `${config.baseURL}${config.url}`,
+          config.headers,
+          config.data
+        );
+        return config;
+      },
+      (error) => {
+        this.serviceLogger.error('Request failed', error);
+        return Promise.reject(error);
+      }
+    );
+
+    // Add response interceptor for logging
+    this.client.interceptors.response.use(
+      (response) => {
+        const startTime = (response.config as any).requestStartTime;
+        const responseTime = startTime ? Date.now() - startTime : undefined;
+        
+        this.serviceLogger.logResponse(
+          response.status,
+          response.config.url || '',
+          response.data,
+          responseTime
+        );
+        return response;
+      },
+      (error) => {
+        if (error.response) {
+          const startTime = (error.config as any)?.requestStartTime;
+          const responseTime = startTime ? Date.now() - startTime : undefined;
+          
+          this.serviceLogger.logResponse(
+            error.response.status,
+            error.config?.url || '',
+            error.response.data,
+            responseTime
+          );
+        } else {
+          this.serviceLogger.error('Network error', error.message);
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
@@ -38,9 +97,16 @@ export class BizmanageService {
    */
   async ping(): Promise<BizmanagePingResponse> {
     const startTime = Date.now();
+    this.serviceLogger.debug('Pinging Bizmanage API for authentication test');
     
     try {
       const response: AxiosResponse = await this.client.get('/restapi/ping');
+      const responseTime = Date.now() - startTime;
+      
+      this.serviceLogger.debug(`Ping completed in ${responseTime}ms`, {
+        status: response.status,
+        authenticated: response.status === 200
+      });
       
       return {
         authenticated: response.status === 200,
@@ -51,6 +117,7 @@ export class BizmanageService {
         timestamp: new Date()
       };
     } catch (error: any) {
+      const responseTime = Date.now() - startTime;
       const status = error.response?.status || 0;
       let message: string;
       
@@ -70,6 +137,12 @@ export class BizmanageService {
         default:
           message = `HTTP ${status}: ${error.message}`;
       }
+      
+      this.serviceLogger.warn(`Ping failed after ${responseTime}ms`, {
+        status,
+        message,
+        error: error.message
+      });
       
       return {
         authenticated: false,
