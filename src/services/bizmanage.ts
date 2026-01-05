@@ -32,7 +32,7 @@ export class BizmanageService {
     this.client = axios.create({
       baseURL: config.instanceUrl,
       headers: {
-        'Authorization': `Bearer ${config.apiKey}`,
+        'x-api-key': config.apiKey,
         'Content-Type': 'application/json'
       },
       timeout: 10000

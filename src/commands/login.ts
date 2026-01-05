@@ -53,9 +53,17 @@ export const loginCommand = new Command()
       console.log();
       const spinner = ora('Testing authentication with /restapi/ping...').start();
 
+      let instanceUrl = answers.instanceUrl.trim();
+      // remove trailing slash if present
+      if (instanceUrl.endsWith('/')) {
+        commandLogger.debug('Removing trailing slash from instance URL');
+        instanceUrl = instanceUrl.slice(0, -1);
+      }
+      const apiKey = answers.apiKey.trim();
+
       const bizmanageService = new BizmanageService({
-        instanceUrl: answers.instanceUrl,
-        apiKey: answers.apiKey
+        instanceUrl,
+        apiKey
       });
 
       const pingResult = await bizmanageService.ping();
