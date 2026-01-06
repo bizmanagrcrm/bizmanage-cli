@@ -237,6 +237,50 @@ Each `meta.json` file contains:
 - Generation timestamp
 - File mappings
 
+## Version Control Strategy
+
+⚠️ **Important**: The pulled data should NOT be committed to your repository!
+
+The `.gitignore` file is configured to exclude:
+- `src/objects/` - Generated table/view definitions and actions
+- `src/backend/` - Generated backend scripts  
+- `src/reports/` - Generated SQL reports
+- `src/pages/` - Generated HTML pages
+- `bizmanage.config.json` - Project configuration (may contain sensitive URLs)
+
+### Why exclude pulled data?
+
+1. **Instance-specific**: Each developer should pull from their own Bizmanage instance
+2. **Sensitive information**: May contain API keys, instance URLs, or business logic
+3. **Generated content**: These files are automatically created and should not be manually edited in version control
+4. **Environment differences**: Different instances may have different customizations
+
+### Recommended workflow:
+
+```bash
+# Each developer on your team should:
+git clone your-repo
+cd your-repo
+npm install
+
+# Login to their own Bizmanage instance  
+bizmanage login
+
+# Pull their own data
+bizmanage pull --init
+
+# Work with the pulled files locally
+# Make changes and push back to their instance
+bizmanage push
+```
+
+### What IS committed to git:
+
+- CLI source code and configuration
+- Documentation and examples  
+- Build scripts and dependencies
+- Empty directories with `.gitkeep` files to maintain structure
+
 ## Metadata Schema
 
 ### Backend Script Metadata Example
