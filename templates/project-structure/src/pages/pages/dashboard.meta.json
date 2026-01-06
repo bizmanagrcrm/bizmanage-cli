@@ -1,0 +1,31 @@
+{
+  "name": "dashboard",
+  "title": "Executive Dashboard",
+  "description": "Executive-level dashboard with key business metrics",
+  "slug": "executive-dashboard",
+  "navigation": {
+    "showInMenu": true,
+    "menuTitle": "Dashboard",
+    "menuOrder": 1
+  },
+  "permissions": [
+    "admin",
+    "executive"
+  ],
+  "layout": {
+    "template": "full-width",
+    "sidebar": false,
+    "fullWidth": true
+  },
+  "assets": {
+    "css": [
+      "dashboard.css"
+    ],
+    "js": [
+      "chart.min.js",
+      "dashboard.js"
+    ]
+  },
+  "lastModified": "2026-01-05T22:21:02.741Z",
+  "version": "2.1.0"
+}

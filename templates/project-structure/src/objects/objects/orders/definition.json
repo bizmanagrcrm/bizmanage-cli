@@ -1,0 +1,70 @@
+{
+  "name": "orders",
+  "type": "table",
+  "fields": [
+    {
+      "name": "id",
+      "type": "integer",
+      "label": "Order ID",
+      "required": true
+    },
+    {
+      "name": "customer_id",
+      "type": "integer",
+      "label": "Customer ID",
+      "required": true
+    },
+    {
+      "name": "order_date",
+      "type": "date",
+      "label": "Order Date",
+      "required": true
+    },
+    {
+      "name": "total",
+      "type": "decimal",
+      "label": "Total Amount",
+      "required": true
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "label": "Status",
+      "validation": {
+        "options": [
+          "pending",
+          "processing",
+          "shipped",
+          "delivered",
+          "cancelled"
+        ]
+      }
+    }
+  ],
+  "settings": {
+    "displayName": "Orders",
+    "icon": "shopping-cart",
+    "sorting": {
+      "field": "order_date",
+      "direction": "desc"
+    },
+    "permissions": {
+      "read": [
+        "user",
+        "admin"
+      ],
+      "create": [
+        "user",
+        "admin"
+      ],
+      "update": [
+        "admin"
+      ],
+      "delete": [
+        "admin"
+      ]
+    }
+  },
+  "lastModified": "2026-01-05T22:21:00.551Z",
+  "version": "1.0.0"
+}

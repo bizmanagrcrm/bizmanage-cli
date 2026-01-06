@@ -8,8 +8,9 @@ pnpm-debug.log*
 # Build outputs
 dist/
 build/
-lib/
 out/
+
+# Note: lib/ contains our CLI source code and should be committed
 
 # TypeScript
 *.tsbuildinfo

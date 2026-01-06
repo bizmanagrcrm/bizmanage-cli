@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Dashboard</title>
+    <style>
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #007cba;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #007cba;
+            margin: 10px 0;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .trend {
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        
+        .trend.up {
+            color: #28a745;
+        }
+        
+        .trend.down {
+            color: #dc3545;
+        }
+        
+        .chart-container {
+            grid-column: 1 / -1;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="metric-card">
+            <div class="metric-label">Total Revenue</div>
+            <div class="metric-value" id="totalRevenue">$0</div>
+            <div class="trend up" id="revenueTrend">+0% from last month</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-label">New Customers</div>
+            <div class="metric-value" id="newCustomers">0</div>
+            <div class="trend up" id="customerTrend">+0% from last month</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-label">Orders</div>
+            <div class="metric-value" id="totalOrders">0</div>
+            <div class="trend down" id="ordersTrend">+0% from last month</div>
+        </div>
+        
+        <div class="metric-card">
+            <div class="metric-label">Avg Order Value</div>
+            <div class="metric-value" id="avgOrderValue">$0</div>
+            <div class="trend up" id="aovTrend">+0% from last month</div>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <h3>Revenue Trend (Last 12 Months)</h3>
+        <div id="revenueChart">
+            <!-- Chart would be rendered here using a charting library -->
+            <p>Chart placeholder - integrate with your preferred charting solution</p>
+        </div>
+    </div>
+    
+    <script>
+        // Dashboard initialization
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                // Fetch dashboard data
+                const response = await fetch('/api/dashboard/metrics');
+                const data = await response.json();
+                
+                // Update metrics
+                document.getElementById('totalRevenue').textContent = 
+                    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+                        .format(data.revenue || 0);
+                        
+                document.getElementById('newCustomers').textContent = data.newCustomers || 0;
+                document.getElementById('totalOrders').textContent = data.totalOrders || 0;
+                document.getElementById('avgOrderValue').textContent = 
+                    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+                        .format(data.avgOrderValue || 0);
+                
+                // Update trends
+                updateTrend('revenueTrend', data.revenueTrend);
+                updateTrend('customerTrend', data.customerTrend);
+                updateTrend('ordersTrend', data.ordersTrend);
+                updateTrend('aovTrend', data.aovTrend);
+                
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+            }
+        });
+        
+        function updateTrend(elementId, trend) {
+            const element = document.getElementById(elementId);
+            if (trend > 0) {
+                element.className = 'trend up';
+                element.textContent = `+${trend.toFixed(1)}% from last month`;
+            } else {
+                element.className = 'trend down';
+                element.textContent = `${trend.toFixed(1)}% from last month`;
+            }
+        }
+    </script>
+</body>
+</html>

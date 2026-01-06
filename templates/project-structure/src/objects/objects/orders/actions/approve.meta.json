@@ -1,0 +1,23 @@
+{
+  "label": "Approve Order",
+  "description": "Approve a pending order",
+  "type": "javascript",
+  "icon": "check",
+  "permissions": [
+    "admin"
+  ],
+  "placement": {
+    "context": "row"
+  },
+  "conditions": {
+    "fieldConditions": [
+      {
+        "field": "status",
+        "operator": "equals",
+        "value": "pending"
+      }
+    ]
+  },
+  "lastModified": "2026-01-05T22:21:00.551Z",
+  "version": "1.0.0"
+}

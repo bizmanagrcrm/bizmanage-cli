@@ -1,0 +1,44 @@
+{
+  "name": "customers",
+  "type": "table",
+  "fields": [
+    {
+      "name": "id",
+      "type": "integer",
+      "label": "Customer ID",
+      "required": true
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "label": "Full Name",
+      "required": true
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "label": "Email Address",
+      "required": true
+    },
+    {
+      "name": "vat_number",
+      "type": "string",
+      "label": "VAT Number"
+    },
+    {
+      "name": "created_at",
+      "type": "datetime",
+      "label": "Created At"
+    }
+  ],
+  "settings": {
+    "displayName": "Customers",
+    "icon": "users",
+    "sorting": {
+      "field": "name",
+      "direction": "asc"
+    }
+  },
+  "lastModified": "2026-01-05T22:21:00.551Z",
+  "version": "1.0.0"
+}

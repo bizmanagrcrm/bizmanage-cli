@@ -1,0 +1,10 @@
+{
+  "name": "shared-utils",
+  "description": "Shared utility functions used by other scripts",
+  "type": "shared",
+  "environment": {
+    "nodeVersion": "18"
+  },
+  "lastModified": "2026-01-05T22:21:01.546Z",
+  "version": "1.2.0"
+}

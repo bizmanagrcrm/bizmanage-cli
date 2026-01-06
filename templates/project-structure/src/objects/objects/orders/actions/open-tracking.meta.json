@@ -1,0 +1,29 @@
+{
+  "label": "Track Package",
+  "description": "Open tracking information in new window",
+  "type": "http",
+  "icon": "truck",
+  "permissions": [
+    "user",
+    "admin"
+  ],
+  "placement": {
+    "context": "row"
+  },
+  "conditions": {
+    "fieldConditions": [
+      {
+        "field": "status",
+        "operator": "equals",
+        "value": "shipped"
+      }
+    ]
+  },
+  "httpConfig": {
+    "url": "https://tracking.example.com/track?id={{tracking_id}}",
+    "method": "GET",
+    "openInNewWindow": true
+  },
+  "lastModified": "2026-01-05T22:21:00.551Z",
+  "version": "1.0.0"
+}

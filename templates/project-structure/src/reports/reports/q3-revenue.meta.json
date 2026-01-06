@@ -1,0 +1,38 @@
+{
+  "name": "q3-revenue",
+  "description": "Quarterly revenue analysis with customer segmentation",
+  "category": "Finance",
+  "parameters": [
+    {
+      "name": "start_date",
+      "type": "date",
+      "label": "Start Date",
+      "required": true,
+      "defaultValue": "2024-07-01"
+    },
+    {
+      "name": "end_date",
+      "type": "date",
+      "label": "End Date",
+      "required": true,
+      "defaultValue": "2024-09-30"
+    }
+  ],
+  "permissions": [
+    "finance",
+    "admin"
+  ],
+  "format": {
+    "type": "table"
+  },
+  "scheduling": {
+    "enabled": true,
+    "cron": "0 9 1 * *",
+    "recipients": [
+      "finance@company.com",
+      "ceo@company.com"
+    ]
+  },
+  "lastModified": "2026-01-05T22:21:02.071Z",
+  "version": "1.1.0"
+}

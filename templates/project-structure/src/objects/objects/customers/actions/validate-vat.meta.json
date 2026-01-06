@@ -1,0 +1,22 @@
+{
+  "label": "Validate VAT",
+  "description": "Validate customer VAT number",
+  "type": "javascript",
+  "icon": "shield-check",
+  "permissions": [
+    "admin"
+  ],
+  "placement": {
+    "context": "row"
+  },
+  "conditions": {
+    "fieldConditions": [
+      {
+        "field": "vat_number",
+        "operator": "not_empty"
+      }
+    ]
+  },
+  "lastModified": "2026-01-05T22:21:00.551Z",
+  "version": "1.0.0"
+}

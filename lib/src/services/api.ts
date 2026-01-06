@@ -1,0 +1,396 @@
+import axios, { AxiosInstance } from 'axios';
+import chalk from 'chalk';
+import { AuthConfig } from './auth.js';
+import { 
+  ObjectDefinition,
+  ActionMetadata,
+  BackendScriptMetadata,
+  ReportMetadata,
+  PageMetadata
+} from '../schemas/project-structure.js';
+
+export interface Customization {
+  id: string;
+  name: string;
+  type: 'report' | 'page' | 'backend-script' | 'field';
+  code: string;
+  metadata: Record<string, any>;
+  scope: string;
+}
+
+// New interfaces for the project structure
+export interface BizmanageObject {
+  id: string;
+  name: string;
+  definition: ObjectDefinition;
+  actions: BizmanageAction[];
+}
+
+export interface BizmanageAction {
+  id: string;
+  name: string;
+  code?: string;
+  metadata: ActionMetadata;
+}
+
+export interface BizmanageBackendScript {
+  id: string;
+  name: string;
+  code: string;
+  metadata: BackendScriptMetadata;
+}
+
+export interface BizmanageReport {
+  id: string;
+  name: string;
+  sql: string;
+  metadata: ReportMetadata;
+}
+
+export interface BizmanagePage {
+  id: string;
+  name: string;
+  html: string;
+  metadata: PageMetadata;
+}
+
+// Actual API response interfaces
+export interface BizmanageTableResponse {
+  system: boolean;
+  display_name: string;
+  internal_name: string;
+  search_enabled: boolean;
+  id?: number;
+  created_by?: number;
+  created_at?: number;
+  icon?: string;
+  show_on_menu?: boolean;
+  related_to?: any;
+  data?: any;
+  token?: string;
+  orderBy?: {
+    clm: string;
+    order: 'asc' | 'desc';
+  };
+  filters?: any[];
+  desc?: string;
+  bcg_color?: string;
+  grids?: any;
+  available_filters?: Array<{
+    type: string;
+    text: string;
+    name: string;
+    hide?: boolean;
+    is_custom?: boolean;
+    field_internal_name?: string;
+    field?: string;
+    otherTable?: string;
+    otherColumnDisplay?: string;
+  }>;
+  has_comments?: boolean;
+  table_name?: string;
+  set_filters?: any;
+  deleted_ref?: any;
+  availableEventsForWH?: Array<{
+    event_name: string;
+    display_name: string;
+  }>;
+  read_only?: boolean;
+}
+
+export class ApiService {
+  private client: AxiosInstance;
+  private config: AuthConfig;
+
+  constructor(config: AuthConfig) {
+    this.config = config;
+    this.client = axios.create({
+      baseURL: config.instanceUrl,
+      headers: {
+        'x-api-key': config.apiKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+  }
+
+  /**
+   * Fetch tables/views from Bizmanage API
+   */
+  async fetchTables(): Promise<BizmanageTableResponse[]> {
+    try {
+      const response = await this.client.get('/cust-fields/tables?custom_fields=true');
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  /**
+   * Convert Bizmanage table response to our object format
+   * This method transforms the API response into our internal structure
+   */
+  convertTableToObject(table: BizmanageTableResponse): BizmanageObject {
+    // Determine if it's a system table or custom table
+    const isSystemTable = table.system === true;
+    const tableType = isSystemTable ? 'table' : 'table'; // Could be 'view' based on other criteria
+    
+    // Create object definition from table data
+    const definition: ObjectDefinition = {
+      name: table.internal_name,
+      type: tableType,
+      fields: [], // TODO: We'll need another endpoint to get field definitions
+      settings: {
+        displayName: table.display_name,
+        description: table.desc || undefined,
+        icon: table.icon || undefined,
+        sorting: table.orderBy ? {
+          field: table.orderBy.clm,
+          direction: table.orderBy.order
+        } : undefined,
+        permissions: {
+          read: ['user'], // Default permissions, TODO: get from actual permissions
+          create: ['user'],
+          update: ['user'],
+          delete: ['admin']
+        }
+      },
+      lastModified: table.created_at ? new Date(table.created_at).toISOString() : new Date().toISOString(),
+      version: '1.0.0'
+    };
+
+    // Convert available filters to actions (custom filters can be seen as configuration actions)
+    const actions: BizmanageAction[] = [];
+    
+    if (table.available_filters) {
+      table.available_filters
+        .filter(filter => filter.is_custom) // Only convert custom filters to actions
+        .forEach(filter => {
+          const actionMetadata: ActionMetadata = {
+            label: filter.text,
+            description: `Custom filter: ${filter.text}`,
+            type: 'configuration',
+            permissions: ['user'],
+            placement: { context: 'toolbar' },
+            lastModified: new Date().toISOString(),
+            version: '1.0.0'
+          };
+
+          // Add filter-specific configuration
+          if (filter.type === 'search_match' && filter.otherTable) {
+            actionMetadata.httpConfig = {
+              url: `/api/search/${filter.otherTable}`,
+              method: 'GET'
+            };
+          }
+
+          actions.push({
+            id: filter.name,
+            name: filter.name,
+            metadata: actionMetadata
+          });
+        });
+    }
+
+    return {
+      id: table.id?.toString() || table.internal_name,
+      name: table.internal_name,
+      definition,
+      actions
+    };
+  }
+
+  /**
+   * Fetch objects (tables/views) with their definitions and actions
+   */
+  async fetchObjects(): Promise<BizmanageObject[]> {
+    try {
+      const tables = await this.fetchTables();
+      
+      // Convert tables to our object format
+      const objects = tables.map(table => this.convertTableToObject(table));
+      
+      // Filter out tables that don't have meaningful data for our use case
+      return objects.filter(obj => 
+        obj.definition.settings?.displayName && 
+        obj.name // Ensure we have basic required fields
+      );
+      
+    } catch (error: any) {
+      throw new Error(`Failed to fetch objects: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch backend scripts
+   * TODO: Replace with actual API endpoint when available
+   */
+  async fetchBackendScripts(): Promise<BizmanageBackendScript[]> {
+    // Placeholder - return empty array until we have the actual endpoint
+    return [];
+  }
+
+  /**
+   * Fetch custom reports
+   * TODO: Replace with actual API endpoint when available
+   */
+  async fetchReports(): Promise<BizmanageReport[]> {
+    // Placeholder - return empty array until we have the actual endpoint
+    return [];
+  }
+
+  /**
+   * Fetch custom pages
+   * TODO: Replace with actual API endpoint when available
+   */
+  async fetchPages(): Promise<BizmanagePage[]> {
+    // Placeholder - return empty array until we have the actual endpoint
+    return [];
+  }
+
+  /**
+   * Deploy customizations to the platform
+   * This is a mock implementation - replace with actual API calls
+   */
+  async deployCustomizations(customizations: Customization[]): Promise<void> {
+    // Mock API call with setTimeout to simulate network delay
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        // In real implementation:
+        // const response = await this.client.post('/api/customizations/deploy', {
+        //   customizations
+        // });
+        // 
+        // if (response.status !== 200) {
+        //   throw new Error(`Deployment failed: ${response.statusText}`);
+        // }
+
+        // Mock success (90% chance) or failure (10% chance) for demonstration
+        if (Math.random() > 0.1) {
+          console.log(chalk.dim(`Mock: Deployed ${customizations.length} customizations to ${this.config.instanceUrl}`));
+          resolve();
+        } else {
+          reject(new Error('Mock deployment failure - network timeout'));
+        }
+      }, Math.random() * 2000 + 1000); // Random delay between 1000-3000ms
+    });
+  }
+
+  /**
+   * Test API connection and authentication using the ping endpoint
+   */
+  async testConnection(): Promise<{ success: boolean; status?: number; message?: string }> {
+    try {
+      const response = await this.client.get('/restapi/ping');
+      
+      if (response.status === 200) {
+        return { 
+          success: true, 
+          status: 200, 
+          message: 'Authentication successful' 
+        };
+      } else {
+        return { 
+          success: false, 
+          status: response.status, 
+          message: `Unexpected response status: ${response.status}` 
+        };
+      }
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        return { 
+          success: false, 
+          status: 403, 
+          message: 'Authentication failed - invalid credentials' 
+        };
+      }
+      
+      return { 
+        success: false, 
+        status: error.response?.status || 0, 
+        message: error.message || 'Connection failed' 
+      };
+    }
+  }
+
+  /**
+   * Test authentication by pinging the Bizmanage API
+   */
+  async ping(): Promise<{ authenticated: boolean; status: number; message: string }> {
+    try {
+      const response = await this.client.get('/restapi/ping');
+      
+      return {
+        authenticated: response.status === 200,
+        status: response.status,
+        message: response.status === 200 ? 'Authenticated' : 'Authentication failed'
+      };
+    } catch (error: any) {
+      const status = error.response?.status || 0;
+      
+      return {
+        authenticated: false,
+        status,
+        message: status === 403 
+          ? 'Not authenticated - invalid or missing credentials'
+          : `Connection error: ${error.message}`
+      };
+    }
+  }
+}
+
+/**
+ * Generate sample code based on scope type
+ */
+function getSampleCode(scope: string): string {
+  switch (scope) {
+    case 'backend-scripts':
+      return `// Backend Script for ${scope}
+export function processData(input) {
+  console.log('Processing data:', input);
+  return input.map(item => ({
+    ...item,
+    processed: true,
+    timestamp: new Date().toISOString()
+  }));
+}`;
+
+    case 'reports':
+      return `SELECT 
+  id,
+  name,
+  created_date,
+  status
+FROM custom_table 
+WHERE status = 'active'
+ORDER BY created_date DESC`;
+
+    case 'pages':
+      return `<div class="custom-page">
+  <h1>Custom Page</h1>
+  <p>This is a custom page component.</p>
+  <button onclick="handleClick()">Click Me</button>
+</div>
+
+<script>
+function handleClick() {
+  alert('Custom page button clicked!');
+}
+</script>`;
+
+    case 'fields':
+      return `{
+  "type": "text",
+  "label": "Custom Field",
+  "required": true,
+  "validation": {
+    "minLength": 3,
+    "maxLength": 100
+  }
+}`;
+
+    default:
+      return `// Sample code for ${scope}
+console.log('Hello from ${scope}');`;
+  }
+}
