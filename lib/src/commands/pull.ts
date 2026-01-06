@@ -80,8 +80,7 @@ export const pullCommand = new Command()
         objects: 0,
         backendScripts: 0,
         reports: 0,
-        pages: 0,
-        errors: [] as string[]
+        pages: 0
       };
 
       // Step 1: First fetch tables from Bizmanage API
@@ -104,9 +103,9 @@ export const pullCommand = new Command()
       } catch (error) {
         tablesSpinner.fail(`${chalk.red('✗')} Failed to fetch tables`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        results.errors.push(`Tables: ${errorMessage}`);
         
         // Provide helpful error guidance for table fetching
+        console.log();
         if (errorMessage.includes('403') || errorMessage.includes('401')) {
           console.log(chalk.yellow('💡 Authentication issue detected. Please check:'));
           console.log(chalk.dim('   • API key is valid and not expired'));
@@ -122,7 +121,9 @@ export const pullCommand = new Command()
           console.log(chalk.dim('   • Trying again in a moment'));
         }
         
-        // Continue even if tables fetch fails - other endpoints might work
+        console.log();
+        console.log(chalk.red(`❌ Pull failed during table fetching: ${errorMessage}`));
+        process.exit(1);
       }
 
       console.log(); // Add spacing after tables section
@@ -142,14 +143,18 @@ export const pullCommand = new Command()
             results.objects = objectResult.itemCount;
             objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
           } else {
-            results.errors.push(...objectResult.errors);
             objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
+            console.log();
+            console.log(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
+            process.exit(1);
           }
         }
       } catch (error) {
         objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        results.errors.push(`Objects: ${errorMessage}`);
+        console.log();
+        console.log(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
+        process.exit(1);
       }
 
       // Pull backend scripts
@@ -164,12 +169,17 @@ export const pullCommand = new Command()
           results.backendScripts = scriptResult.itemCount;
           backendSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
         } else {
-          results.errors.push(...scriptResult.errors);
           backendSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
+          console.log();
+          console.log(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
+          process.exit(1);
         }
       } catch (error) {
         backendSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
-        results.errors.push(`Backend Scripts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.log();
+        console.log(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
+        process.exit(1);
       }
 
       // Pull reports
@@ -184,12 +194,17 @@ export const pullCommand = new Command()
           results.reports = reportResult.itemCount;
           reportsSpinner.succeed(`${chalk.green('✓')} Reports: ${results.reports} items processed`);
         } else {
-          results.errors.push(...reportResult.errors);
           reportsSpinner.fail(`${chalk.red('✗')} Reports: ${reportResult.errors.join(', ')}`);
+          console.log();
+          console.log(chalk.red(`❌ Pull failed during reports processing: ${reportResult.errors.join(', ')}`));
+          process.exit(1);
         }
       } catch (error) {
         reportsSpinner.fail(`${chalk.red('✗')} Failed to fetch reports`);
-        results.errors.push(`Reports: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.log();
+        console.log(chalk.red(`❌ Pull failed during reports fetching: ${errorMessage}`));
+        process.exit(1);
       }
 
       // Pull pages
@@ -204,12 +219,17 @@ export const pullCommand = new Command()
           results.pages = pageResult.itemCount;
           pagesSpinner.succeed(`${chalk.green('✓')} Pages: ${results.pages} items processed`);
         } else {
-          results.errors.push(...pageResult.errors);
           pagesSpinner.fail(`${chalk.red('✗')} Pages: ${pageResult.errors.join(', ')}`);
+          console.log();
+          console.log(chalk.red(`❌ Pull failed during pages processing: ${pageResult.errors.join(', ')}`));
+          process.exit(1);
         }
       } catch (error) {
         pagesSpinner.fail(`${chalk.red('✗')} Failed to fetch pages`);
-        results.errors.push(`Pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.log();
+        console.log(chalk.red(`❌ Pull failed during pages fetching: ${errorMessage}`));
+        process.exit(1);
       }
 
       // Update project config with pull timestamp
@@ -229,14 +249,8 @@ export const pullCommand = new Command()
 
       console.log();
       
-      if (results.errors.length > 0) {
-        console.log(chalk.red('❌ Pull completed with errors:'));
-        results.errors.forEach(error => {
-          console.log(chalk.red(`   • ${error}`));
-        });
-      } else {
-        console.log(chalk.green('🎉 Pull completed successfully!'));
-      }
+      // If we reach this point, everything succeeded
+      console.log(chalk.green('🎉 Pull completed successfully!'));
       
       const totalItems = results.objects + results.backendScripts + results.reports + results.pages;
       console.log(chalk.dim(`Total items: ${totalItems}`));
@@ -247,10 +261,6 @@ export const pullCommand = new Command()
       console.log(chalk.dim(`  • Pages: ${results.pages}`));
       console.log();
       console.log(chalk.dim(`Files written to: ${projectPath}`));
-
-      if (results.errors.length > 0) {
-        process.exit(1);
-      }
 
     } catch (error) {
       console.log();
