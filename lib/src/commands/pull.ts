@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import path from 'path';
 import { AuthService } from '../services/auth.js';
-import { ApiService } from '../services/api.js';
+import { ApiService, BizmanageTableResponse } from '../services/api.js';
 import { ProjectStructureService } from '../services/project-structure.js';
 import { BizmanageService } from '../services/bizmanage.js';
 
@@ -76,6 +76,7 @@ export const pullCommand = new Command()
 
       // Pull different types of customizations
       const results = {
+        tables: 0,
         objects: 0,
         backendScripts: 0,
         reports: 0,
@@ -83,14 +84,57 @@ export const pullCommand = new Command()
         errors: [] as string[]
       };
 
-      // Pull objects (tables/views with their actions)
-      const objectsSpinner = ora('Fetching objects and actions...').start();
+      // Step 1: First fetch tables from Bizmanage API
+      const tablesSpinner = ora('Fetching tables from Bizmanage API...').start();
+      let tables: BizmanageTableResponse[] = [];
+      
       try {
-        const objects = await apiService.fetchObjects();
+        tables = await apiService.fetchTables();
+        results.tables = tables.length;
+        tablesSpinner.succeed(`${chalk.green('✓')} Tables: Found ${results.tables} tables`);
+        
+        if (tables.length === 0) {
+          console.log(chalk.yellow('⚠️  No tables found. This might indicate:'));
+          console.log(chalk.dim('   • No custom tables are configured'));
+          console.log(chalk.dim('   • API permissions might not include table access'));
+          console.log(chalk.dim('   • The endpoint might not be available on your instance'));
+        } else {
+          console.log(chalk.dim(`   Found tables: ${tables.map(t => t.internal_name || t.display_name).join(', ')}`));
+        }
+      } catch (error) {
+        tablesSpinner.fail(`${chalk.red('✗')} Failed to fetch tables`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.errors.push(`Tables: ${errorMessage}`);
+        
+        // Provide helpful error guidance for table fetching
+        if (errorMessage.includes('403') || errorMessage.includes('401')) {
+          console.log(chalk.yellow('💡 Authentication issue detected. Please check:'));
+          console.log(chalk.dim('   • API key is valid and not expired'));
+          console.log(chalk.dim('   • Instance URL is correct'));
+          console.log(chalk.dim('   • API key has required permissions'));
+        } else if (errorMessage.includes('404')) {
+          console.log(chalk.yellow('💡 Endpoint not found. This might indicate:'));
+          console.log(chalk.dim('   • The API endpoint URL has changed'));
+          console.log(chalk.dim('   • Your instance might not support custom tables'));
+        } else if (errorMessage.includes('timeout')) {
+          console.log(chalk.yellow('💡 Request timed out. Consider:'));
+          console.log(chalk.dim('   • Checking your internet connection'));
+          console.log(chalk.dim('   • Trying again in a moment'));
+        }
+        
+        // Continue even if tables fetch fails - other endpoints might work
+      }
+
+      console.log(); // Add spacing after tables section
+
+      // Step 2: Convert tables to objects and process them
+      const objectsSpinner = ora('Converting tables to objects and processing actions...').start();
+      try {
+        const objects = tables.map(table => apiService.convertTableToObject(table));
         objectsSpinner.text = `Processing objects (${objects.length} items)...`;
         
         if (objects.length === 0) {
-          objectsSpinner.warn(`${chalk.yellow('⚠️')} Objects: No objects found`);
+          objectsSpinner.warn(`${chalk.yellow('⚠️')} Objects: No objects to process`);
         } else {
           const objectResult = await projectService.writeObjects(projectPath, objects);
           
@@ -103,25 +147,9 @@ export const pullCommand = new Command()
           }
         }
       } catch (error) {
-        objectsSpinner.fail(`${chalk.red('✗')} Failed to fetch objects`);
+        objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         results.errors.push(`Objects: ${errorMessage}`);
-        
-        // Provide helpful error guidance
-        if (errorMessage.includes('403') || errorMessage.includes('401')) {
-          console.log(chalk.yellow('💡 Authentication issue detected. Please check:'));
-          console.log(chalk.dim('   • API key is valid and not expired'));
-          console.log(chalk.dim('   • Instance URL is correct'));
-          console.log(chalk.dim('   • API key has required permissions'));
-        } else if (errorMessage.includes('404')) {
-          console.log(chalk.yellow('💡 Endpoint not found. This might indicate:'));
-          console.log(chalk.dim('   • The API endpoint URL has changed'));
-          console.log(chalk.dim('   • Your instance might not support this feature'));
-        } else if (errorMessage.includes('timeout')) {
-          console.log(chalk.yellow('💡 Request timed out. Consider:'));
-          console.log(chalk.dim('   • Checking your internet connection'));
-          console.log(chalk.dim('   • Trying again in a moment'));
-        }
       }
 
       // Pull backend scripts
@@ -212,7 +240,8 @@ export const pullCommand = new Command()
       
       const totalItems = results.objects + results.backendScripts + results.reports + results.pages;
       console.log(chalk.dim(`Total items: ${totalItems}`));
-      console.log(chalk.dim(`  • Objects: ${results.objects}`));
+      console.log(chalk.dim(`  • Tables Found: ${results.tables}`));
+      console.log(chalk.dim(`  • Objects Processed: ${results.objects}`));
       console.log(chalk.dim(`  • Backend Scripts: ${results.backendScripts}`));
       console.log(chalk.dim(`  • Reports: ${results.reports}`));
       console.log(chalk.dim(`  • Pages: ${results.pages}`));

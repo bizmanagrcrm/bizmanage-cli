@@ -8,6 +8,7 @@ import {
   ReportMetadata,
   PageMetadata
 } from '../schemas/project-structure.js';
+import { logger } from '../utils/logger.js';
 
 export interface Customization {
   id: string;
@@ -101,6 +102,7 @@ export interface BizmanageTableResponse {
 export class ApiService {
   private client: AxiosInstance;
   private config: AuthConfig;
+  private serviceLogger = logger.child('ApiService');
 
   constructor(config: AuthConfig) {
     this.config = config;
@@ -119,9 +121,11 @@ export class ApiService {
    */
   async fetchTables(): Promise<BizmanageTableResponse[]> {
     try {
+      this.serviceLogger.debug('Fetching tables from Bizmanage API');
       const response = await this.client.get('/cust-fields/tables?custom_fields=true');
       return response.data;
     } catch (error: any) {
+      this.serviceLogger.error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
       throw new Error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
     }
   }
