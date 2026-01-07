@@ -19,7 +19,6 @@ export class FileSystemService {
       generatedAt: new Date().toISOString(),
       itemCount: customizations.length,
       items: customizations.map(c => ({
-        id: c.id,
         name: c.name,
         type: c.type,
         file: this.getCodeFileName(c),
@@ -76,7 +75,6 @@ export class FileSystemService {
             const code = await fs.readFile(codePath, 'utf8');
             
             customizations.push({
-              id: item.id,
               name: item.name,
               type: item.type,
               code,

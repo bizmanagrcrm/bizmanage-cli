@@ -16,6 +16,7 @@ import {
   validatePageMetadata
 } from '../schemas/project-structure.js';
 import { logger } from '../utils/logger.js';
+import { HashCacheService } from './hash-cache.js';
 
 export interface ProjectItem {
   id: string;
@@ -37,6 +38,11 @@ export interface PullResult {
 
 export class ProjectStructureService {
   private serviceLogger = logger.child('ProjectStructureService');
+  private hashCache: HashCacheService;
+
+  constructor() {
+    this.hashCache = new HashCacheService();
+  }
 
   /**
    * Initialize a new Bizmanage project structure
@@ -104,16 +110,73 @@ export class ProjectStructureService {
   }
 
   /**
+   * Write fields for a specific object/table
+   */
+  async writeFields(
+    projectPath: string,
+    objectName: string,
+    fields: Array<any>
+  ): Promise<PullResult> {
+    const result: PullResult = { success: true, itemCount: 0, errors: [], warnings: [] };
+    const objectDir = path.join(projectPath, 'src', 'objects', this.sanitizeName(objectName));
+    const fieldsDir = path.join(objectDir, 'fields');
+
+    try {
+      await this.hashCache.initialize(projectPath);
+      await fs.ensureDir(fieldsDir);
+
+      let written = 0;
+      let skipped = 0;
+
+      for (const field of fields) {
+        // Remove id from field data
+        const { id, ...fieldWithoutId } = field;
+        
+        // Use internal_name if available, otherwise fall back to name
+        const fieldName = this.sanitizeName(field.internal_name || field.name || 'unknown');
+        const fieldPath = path.join(fieldsDir, `${fieldName}.json`);
+
+        // Write field definition only if changed
+        const wasWritten = await this.hashCache.writeJSONIfChanged(
+          projectPath,
+          fieldPath,
+          fieldWithoutId,
+          { spaces: 2 }
+        );
+        
+        if (wasWritten) {
+          written++;
+        } else {
+          skipped++;
+        }
+        result.itemCount++;
+      }
+
+      await this.hashCache.save();
+      
+      if (skipped > 0) {
+        this.serviceLogger.debug(`Wrote ${written} fields, skipped ${skipped} unchanged fields`);
+      }
+
+      result.success = true;
+    } catch (error) {
+      result.success = false;
+      result.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      this.serviceLogger.error('Failed to write fields', { objectName, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+
+    return result;
+  }
+
+  /**
    * Write objects (tables/views) with their definitions and actions
    */
   async writeObjects(
     projectPath: string,
     objects: Array<{
-      id: string;
       name: string;
       definition: ObjectDefinition;
       actions: Array<{
-        id: string;
         name: string;
         code?: string;
         metadata: ActionMetadata;
@@ -124,6 +187,7 @@ export class ProjectStructureService {
     const objectsPath = path.join(projectPath, 'src', 'objects');
 
     try {
+      await this.hashCache.initialize(projectPath);
       await fs.ensureDir(objectsPath);
 
       for (const obj of objects) {
@@ -131,7 +195,8 @@ export class ProjectStructureService {
         await fs.ensureDir(objectDir);
 
         // Write definition.json
-        await fs.writeJSON(
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
           path.join(objectDir, 'definition.json'),
           obj.definition,
           { spaces: 2 }
@@ -148,7 +213,8 @@ export class ProjectStructureService {
             // Write code file if present
             if (action.code) {
               const ext = this.getActionFileExtension(action.metadata.type);
-              await fs.writeFile(
+              await this.hashCache.writeFileIfChanged(
+                projectPath,
                 path.join(actionsDir, `${actionName}${ext}`),
                 action.code,
                 'utf8'
@@ -156,7 +222,8 @@ export class ProjectStructureService {
             }
 
             // Write metadata file
-            await fs.writeJSON(
+            await this.hashCache.writeJSONIfChanged(
+              projectPath,
               path.join(actionsDir, `${actionName}.meta.json`),
               action.metadata,
               { spaces: 2 }
@@ -169,6 +236,7 @@ export class ProjectStructureService {
         result.itemCount++;
       }
 
+      await this.hashCache.save();
       this.serviceLogger.info(`Objects written successfully`, { count: objects.length });
     } catch (error) {
       result.success = false;
@@ -185,7 +253,6 @@ export class ProjectStructureService {
   async writeBackendScripts(
     projectPath: string,
     scripts: Array<{
-      id: string;
       name: string;
       code: string;
       metadata: BackendScriptMetadata;
@@ -195,20 +262,23 @@ export class ProjectStructureService {
     const backendPath = path.join(projectPath, 'src', 'backend');
 
     try {
+      await this.hashCache.initialize(projectPath);
       await fs.ensureDir(backendPath);
 
       for (const script of scripts) {
         const scriptName = this.sanitizeName(script.name);
 
         // Write code file
-        await fs.writeFile(
+        await this.hashCache.writeFileIfChanged(
+          projectPath,
           path.join(backendPath, `${scriptName}.js`),
           script.code,
           'utf8'
         );
 
         // Write metadata file
-        await fs.writeJSON(
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
           path.join(backendPath, `${scriptName}.meta.json`),
           script.metadata,
           { spaces: 2 }
@@ -217,6 +287,7 @@ export class ProjectStructureService {
         result.itemCount++;
       }
 
+      await this.hashCache.save();
       this.serviceLogger.info(`Backend scripts written successfully`, { count: scripts.length });
     } catch (error) {
       result.success = false;
@@ -233,7 +304,6 @@ export class ProjectStructureService {
   async writeReports(
     projectPath: string,
     reports: Array<{
-      id: string;
       name: string;
       sql: string;
       metadata: ReportMetadata;
@@ -243,20 +313,23 @@ export class ProjectStructureService {
     const reportsPath = path.join(projectPath, 'src', 'reports');
 
     try {
+      await this.hashCache.initialize(projectPath);
       await fs.ensureDir(reportsPath);
 
       for (const report of reports) {
         const reportName = this.sanitizeName(report.name);
 
         // Write SQL file
-        await fs.writeFile(
+        await this.hashCache.writeFileIfChanged(
+          projectPath,
           path.join(reportsPath, `${reportName}.sql`),
           report.sql,
           'utf8'
         );
 
         // Write metadata file
-        await fs.writeJSON(
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
           path.join(reportsPath, `${reportName}.meta.json`),
           report.metadata,
           { spaces: 2 }
@@ -265,6 +338,7 @@ export class ProjectStructureService {
         result.itemCount++;
       }
 
+      await this.hashCache.save();
       this.serviceLogger.info(`Reports written successfully`, { count: reports.length });
     } catch (error) {
       result.success = false;
@@ -281,7 +355,6 @@ export class ProjectStructureService {
   async writePages(
     projectPath: string,
     pages: Array<{
-      id: string;
       name: string;
       html: string;
       metadata: PageMetadata;
@@ -291,20 +364,23 @@ export class ProjectStructureService {
     const pagesPath = path.join(projectPath, 'src', 'pages');
 
     try {
+      await this.hashCache.initialize(projectPath);
       await fs.ensureDir(pagesPath);
 
       for (const page of pages) {
         const pageName = this.sanitizeName(page.name);
 
         // Write HTML file
-        await fs.writeFile(
+        await this.hashCache.writeFileIfChanged(
+          projectPath,
           path.join(pagesPath, `${pageName}.html`),
           page.html,
           'utf8'
         );
 
         // Write metadata file
-        await fs.writeJSON(
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
           path.join(pagesPath, `${pageName}.meta.json`),
           page.metadata,
           { spaces: 2 }
@@ -313,6 +389,7 @@ export class ProjectStructureService {
         result.itemCount++;
       }
 
+      await this.hashCache.save();
       this.serviceLogger.info(`Pages written successfully`, { count: pages.length });
     } catch (error) {
       result.success = false;

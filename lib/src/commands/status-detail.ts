@@ -91,7 +91,7 @@ export const statusDetailCommand = new Command()
       // Test API endpoints if requested
       if (options.api) {
         console.log(chalk.blue('🔌 API Endpoints Test'));
-        const apiService = new ApiService(config);
+        const apiService = new ApiService(config, 0);
         
         // Test tables endpoint
         try {

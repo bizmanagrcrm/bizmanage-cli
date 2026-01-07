@@ -32,6 +32,9 @@ pids
 coverage/
 .nyc_output/
 
+# CLI internal cache
+.bizmanage/
+
 # Testing
 .cache/
 jest.config.cache

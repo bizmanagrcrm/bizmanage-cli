@@ -11,7 +11,6 @@ import {
 import { logger } from '../utils/logger.js';
 
 export interface Customization {
-  id: string;
   name: string;
   type: 'report' | 'page' | 'backend-script' | 'field';
   code: string;
@@ -21,41 +20,51 @@ export interface Customization {
 
 // New interfaces for the project structure
 export interface BizmanageObject {
-  id: string;
   name: string;
   definition: ObjectDefinition;
   actions: BizmanageAction[];
 }
 
 export interface BizmanageAction {
-  id: string;
   name: string;
   code?: string;
   metadata: ActionMetadata;
 }
 
 export interface BizmanageBackendScript {
-  id: string;
   name: string;
   code: string;
   metadata: BackendScriptMetadata;
 }
 
 export interface BizmanageReport {
-  id: string;
   name: string;
   sql: string;
   metadata: ReportMetadata;
 }
 
 export interface BizmanagePage {
-  id: string;
   name: string;
   html: string;
   metadata: PageMetadata;
 }
 
 // Actual API response interfaces
+export interface BizmanageField {
+  internal_name?: string;
+  name: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  default_value?: any;
+  options?: string[];
+  validation?: any;
+  display_order?: number;
+  created_at?: number;
+  updated_at?: number;
+  [key: string]: any; // Allow for additional fields
+}
+
 export interface BizmanageTableResponse {
   system: boolean;
   display_name: string;
@@ -103,9 +112,12 @@ export class ApiService {
   private client: AxiosInstance;
   private config: AuthConfig;
   private serviceLogger = logger.child('ApiService');
+  private delayMs: number;
+  private lastRequestTime: number = 0;
 
-  constructor(config: AuthConfig) {
+  constructor(config: AuthConfig, delayMs: number = 0) {
     this.config = config;
+    this.delayMs = delayMs;
     this.client = axios.create({
       baseURL: config.instanceUrl,
       headers: {
@@ -117,10 +129,29 @@ export class ApiService {
   }
 
   /**
+   * Apply rate limiting delay between API requests
+   */
+  private async applyDelay(): Promise<void> {
+    if (this.delayMs > 0) {
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      
+      if (this.lastRequestTime > 0 && timeSinceLastRequest < this.delayMs) {
+        const waitTime = this.delayMs - timeSinceLastRequest;
+        this.serviceLogger.debug(`Waiting ${waitTime}ms before next request`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+      
+      this.lastRequestTime = Date.now();
+    }
+  }
+
+  /**
    * Fetch tables/views from Bizmanage API
    */
   async fetchTables(): Promise<BizmanageTableResponse[]> {
     try {
+      await this.applyDelay();
       this.serviceLogger.debug('Fetching tables from Bizmanage API');
       const response = await this.client.get('/restapi/customization/tables?custom_fields=true');
       this.serviceLogger.debug(`Fetched ${response.data.length} tables`);
@@ -128,6 +159,29 @@ export class ApiService {
     } catch (error: any) {
       this.serviceLogger.error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
       throw new Error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  /**
+   * Fetch fields for a specific table
+   */
+  async fetchFields(tableName: string): Promise<BizmanageField[]> {
+    try {
+      await this.applyDelay();
+      this.serviceLogger.debug(`Fetching fields for table: ${tableName}`);
+      const response = await this.client.get(`/restapi/customization/fields/${tableName}`);
+      this.serviceLogger.debug(`Fetched ${response.data.length} fields for ${tableName}`);
+      
+      // Remove id from each field response
+      const fields = response.data.map((field: any) => {
+        const { id, ...fieldWithoutId } = field;
+        return fieldWithoutId;
+      });
+      
+      return fields;
+    } catch (error: any) {
+      this.serviceLogger.error(`Failed to fetch fields for ${tableName}: ${error.response?.data?.message || error.message}`);
+      throw new Error(`Failed to fetch fields for ${tableName}: ${error.response?.data?.message || error.message}`);
     }
   }
 
@@ -190,7 +244,6 @@ export class ApiService {
           }
 
           actions.push({
-            id: filter.name,
             name: filter.name,
             metadata: actionMetadata
           });
@@ -198,7 +251,6 @@ export class ApiService {
     }
 
     return {
-      id: table.id?.toString() || table.internal_name,
       name: table.internal_name,
       definition,
       actions
@@ -286,6 +338,7 @@ export class ApiService {
    */
   async testConnection(): Promise<{ success: boolean; status?: number; message?: string }> {
     try {
+      await this.applyDelay();
       const response = await this.client.get('/restapi/ping');
       
       if (response.status === 200) {
@@ -323,6 +376,7 @@ export class ApiService {
    */
   async ping(): Promise<{ authenticated: boolean; status: number; message: string }> {
     try {
+      await this.applyDelay();
       const response = await this.client.get('/restapi/ping');
       
       return {

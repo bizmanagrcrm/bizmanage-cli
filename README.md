@@ -168,10 +168,12 @@ bizmanage pull [options]
 **Options:**
 - `-a, --alias <alias>` - Configuration alias to use (default: "default")
 - `-o, --output <path>` - Output directory (default: "./src")
+- `-d, --delay <ms>` - Delay in milliseconds between API requests (default: 0)
+- `--init` - Initialize a new project structure
 
 **Example:**
 ```bash
-# Pull to default ./src directory
+# Pull to default ./src directory (fast, no delay)
 bizmanage pull
 
 # Pull to custom directory
@@ -179,6 +181,12 @@ bizmanage pull --output ./my-customizations
 
 # Pull using specific environment
 bizmanage pull --alias production
+
+# Pull with rate limiting (safe for large projects or rate-limited APIs)
+bizmanage pull --delay 100
+
+# Pull with slower rate limiting for heavily rate-limited instances
+bizmanage pull --delay 500
 ```
 
 ### `bizmanage push`

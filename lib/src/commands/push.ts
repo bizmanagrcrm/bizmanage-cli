@@ -74,7 +74,7 @@ export const pushCommand = new Command()
       console.log(chalk.yellow('🚀 Step 3: Deploying to platform...'));
       
       const fsService = new FileSystemService();
-      const apiService = new ApiService(config);
+      const apiService = new ApiService(config, 0);
 
       // Read local files and prepare payload
       const spinner = ora('Reading local files...').start();
