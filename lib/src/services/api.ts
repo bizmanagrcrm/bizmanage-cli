@@ -122,7 +122,8 @@ export class ApiService {
   async fetchTables(): Promise<BizmanageTableResponse[]> {
     try {
       this.serviceLogger.debug('Fetching tables from Bizmanage API');
-      const response = await this.client.get('/cust-fields/tables?custom_fields=true');
+      const response = await this.client.get('/restapi/customization/tables?custom_fields=true');
+      this.serviceLogger.debug(`Fetched ${response.data.length} tables`);
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error(`Failed to fetch tables: ${error.response?.data?.message || error.message}`);
