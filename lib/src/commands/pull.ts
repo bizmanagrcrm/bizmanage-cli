@@ -93,7 +93,8 @@ export const pullCommand = new Command()
         objects: 0,
         backendScripts: 0,
         reports: 0,
-        pages: 0
+        pages: 0,
+        scripts: 0
       };
 
       // Step 1: First fetch tables from Bizmanage API
@@ -280,6 +281,31 @@ export const pullCommand = new Command()
         process.exit(1);
       }
 
+      // Pull scripts
+      const scriptsSpinner = ora('Fetching scripts...').start();
+      try {
+        const scripts = await apiService.fetchScripts();
+        scriptsSpinner.text = `Processing scripts (${scripts.length} items)...`;
+        
+        const scriptResult = await projectService.writeScripts(projectPath, scripts);
+        
+        if (scriptResult.success) {
+          results.scripts = scriptResult.itemCount;
+          scriptsSpinner.succeed(`${chalk.green('✓')} Scripts: ${results.scripts} items processed`);
+        } else {
+          scriptsSpinner.fail(`${chalk.red('✗')} Scripts: ${scriptResult.errors.join(', ')}`);
+          serviceLogger.info('');
+          serviceLogger.error(chalk.red(`❌ Pull failed during scripts processing: ${scriptResult.errors.join(', ')}`));
+          process.exit(1);
+        }
+      } catch (error) {
+        scriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch scripts`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        serviceLogger.info('');
+        serviceLogger.error(chalk.red(`❌ Pull failed during scripts fetching: ${errorMessage}`));
+        process.exit(1);
+      }
+
       // Update project config with pull timestamp
       try {
         await projectService.updateProjectConfig(projectPath, {
@@ -300,7 +326,7 @@ export const pullCommand = new Command()
       // If we reach this point, everything succeeded
       serviceLogger.info(chalk.green('🎉 Pull completed successfully!'));
       
-      const totalItems = results.objects + results.backendScripts + results.reports + results.pages + totalFields;
+      const totalItems = results.objects + results.backendScripts + results.reports + results.pages + results.scripts + totalFields;
       serviceLogger.info(chalk.dim(`Total items: ${totalItems}`));
       serviceLogger.info(chalk.dim(`  • Tables Found: ${results.tables}`));
       serviceLogger.info(chalk.dim(`  • Objects Processed: ${results.objects}`));
@@ -308,6 +334,7 @@ export const pullCommand = new Command()
       serviceLogger.info(chalk.dim(`  • Backend Scripts: ${results.backendScripts}`));
       serviceLogger.info(chalk.dim(`  • Reports: ${results.reports}`));
       serviceLogger.info(chalk.dim(`  • Pages: ${results.pages}`));
+      serviceLogger.info(chalk.dim(`  • Scripts: ${results.scripts}`));
       serviceLogger.info('');
       serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`));
 

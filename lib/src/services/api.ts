@@ -6,7 +6,8 @@ import {
   ActionMetadata,
   BackendScriptMetadata,
   ReportMetadata,
-  PageMetadata
+  PageMetadata,
+  ScriptMetadata
 } from '../schemas/project-structure.js';
 import { logger } from '../utils/logger.js';
 
@@ -47,6 +48,12 @@ export interface BizmanagePage {
   name: string;
   html: string;
   metadata: PageMetadata;
+}
+
+export interface BizmanageScript {
+  name: string;
+  code: string;
+  metadata: ScriptMetadata;
 }
 
 // Actual API response interfaces
@@ -106,6 +113,35 @@ export interface BizmanageTableResponse {
     display_name: string;
   }>;
   read_only?: boolean;
+}
+
+/**
+ * API response interface for script from /restapi/be-scripts/list
+ */
+export interface BizmanageScriptResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  method: string;
+  script: string;
+  created_at: number | string | null;
+  updated_at: number | string | null;
+  created_by: number | null;
+  updated_by: number | null;
+  is_public: boolean;
+  token: string | null;
+  last_run: number | null;
+  last_run_status: string | null;
+  last_run_output: string | null;
+  last_run_duration: number | null;
+  last_run_by: number | null;
+  last_run_at: number | null;
+  last_run_error: string | null;
+  crontab: string | null;
+  active: boolean;
+  version: number;
+  timeout: number | null;
+  modules: any;
 }
 
 export class ApiService {
@@ -303,6 +339,53 @@ export class ApiService {
   async fetchPages(): Promise<BizmanagePage[]> {
     // Placeholder - return empty array until we have the actual endpoint
     return [];
+  }
+
+  /**
+   * Fetch backend scripts from the platform
+   * Endpoint: GET /restapi/be-scripts/list
+   */
+  async fetchScripts(): Promise<BizmanageScript[]> {
+    await this.applyDelay();
+    
+    try {
+      const response = await this.client.get<BizmanageScriptResponse[]>('/restapi/be-scripts/list');
+      
+      // Transform API response to our internal format
+      const scripts: BizmanageScript[] = response.data.map(apiScript => {
+        // Extract metadata (excluding id, script content, and last_run* fields)
+        const metadata: ScriptMetadata = {
+          name: apiScript.name,
+          description: apiScript.description,
+          method: apiScript.method,
+          created_at: apiScript.created_at,
+          updated_at: apiScript.updated_at,
+          created_by: apiScript.created_by,
+          updated_by: apiScript.updated_by,
+          is_public: apiScript.is_public,
+          token: apiScript.token,
+          crontab: apiScript.crontab,
+          active: apiScript.active,
+          version: apiScript.version,
+          timeout: apiScript.timeout,
+          modules: apiScript.modules
+        };
+
+        return {
+          name: apiScript.name,
+          code: apiScript.script || '',
+          metadata
+        };
+      });
+
+      this.serviceLogger.info(`Fetched ${scripts.length} scripts from API`);
+      return scripts;
+    } catch (error) {
+      this.serviceLogger.error('Failed to fetch scripts', { 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      throw error;
+    }
   }
 
   /**

@@ -209,6 +209,28 @@ export const PageMetadataSchema = z.object({
 export type PageMetadata = z.infer<typeof PageMetadataSchema>;
 
 /**
+ * Schema for backend script metadata (for API scripts)
+ */
+export const ScriptMetadataSchema = z.object({
+  name: z.string().describe('Script internal name'),
+  description: z.string().nullable().optional().describe('Script description'),
+  method: z.string().describe('HTTP method for the script'),
+  created_at: z.union([z.string(), z.number(), z.null()]).optional().describe('Creation timestamp'),
+  updated_at: z.union([z.string(), z.number(), z.null()]).optional().describe('Update timestamp'),
+  created_by: z.union([z.number(), z.null()]).optional().describe('Creator user ID'),
+  updated_by: z.union([z.number(), z.null()]).optional().describe('Updater user ID'),
+  is_public: z.boolean().optional().describe('Whether script is publicly accessible'),
+  token: z.string().nullable().optional().describe('Access token'),
+  crontab: z.string().nullable().optional().describe('Cron schedule'),
+  active: z.boolean().optional().describe('Whether script is active'),
+  version: z.number().optional().describe('Script version'),
+  timeout: z.union([z.number(), z.null()]).optional().describe('Execution timeout'),
+  modules: z.any().optional().describe('Required modules')
+});
+
+export type ScriptMetadata = z.infer<typeof ScriptMetadataSchema>;
+
+/**
  * Validation functions
  */
 export const validateProjectConfig = (data: unknown): BizmanageProjectConfig => {
@@ -233,4 +255,8 @@ export const validateReportMetadata = (data: unknown): ReportMetadata => {
 
 export const validatePageMetadata = (data: unknown): PageMetadata => {
   return PageMetadataSchema.parse(data);
+};
+
+export const validateScriptMetadata = (data: unknown): ScriptMetadata => {
+  return ScriptMetadataSchema.parse(data);
 };

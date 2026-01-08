@@ -9,11 +9,13 @@ import {
   BackendScriptMetadata,
   ReportMetadata,
   PageMetadata,
+  ScriptMetadata,
   validateObjectDefinition,
   validateActionMetadata,
   validateBackendScriptMetadata,
   validateReportMetadata,
-  validatePageMetadata
+  validatePageMetadata,
+  validateScriptMetadata
 } from '../schemas/project-structure.js';
 import { logger } from '../utils/logger.js';
 import { HashCacheService } from './hash-cache.js';
@@ -395,6 +397,57 @@ export class ProjectStructureService {
       result.success = false;
       result.errors.push(`Failed to write pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
       this.serviceLogger.error('Failed to write pages', { error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+
+    return result;
+  }
+
+  /**
+   * Write scripts (from /restapi/be-scripts/list)
+   */
+  async writeScripts(
+    projectPath: string,
+    scripts: Array<{
+      name: string;
+      code: string;
+      metadata: ScriptMetadata;
+    }>
+  ): Promise<PullResult> {
+    const result: PullResult = { success: true, itemCount: 0, errors: [], warnings: [] };
+    const backendPath = path.join(projectPath, 'src', 'backend');
+
+    try {
+      await this.hashCache.initialize(projectPath);
+      await fs.ensureDir(backendPath);
+
+      for (const script of scripts) {
+        const scriptName = this.sanitizeName(script.name);
+
+        // Write code file (.js)
+        await this.hashCache.writeFileIfChanged(
+          projectPath,
+          path.join(backendPath, `${scriptName}.js`),
+          script.code,
+          'utf8'
+        );
+
+        // Write metadata file (.json)
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
+          path.join(backendPath, `${scriptName}.json`),
+          script.metadata,
+          { spaces: 2 }
+        );
+
+        result.itemCount++;
+      }
+
+      await this.hashCache.save();
+      this.serviceLogger.info(`Scripts written successfully`, { count: scripts.length });
+    } catch (error) {
+      result.success = false;
+      result.errors.push(`Failed to write scripts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.serviceLogger.error('Failed to write scripts', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
 
     return result;
