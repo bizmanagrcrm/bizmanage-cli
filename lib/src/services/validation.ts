@@ -1,247 +1,520 @@
-import { z } from 'zod';
 import fs from 'fs-extra';
 import path from 'path';
-import { FileSystemService } from './filesystem.js';
+import { logger } from '../utils/logger.js';
+import {
+  ObjectDefinitionSchema,
+  ActionMetadataSchema,
+  BackendScriptMetadataSchema,
+  ReportMetadataSchema,
+  PageMetadataSchema,
+  ScriptMetadataSchema
+} from '../schemas/project-structure.js';
+import { HashCacheService } from './hash-cache.js';
 
-// Base metadata schema that all customizations share
-const baseMetadataSchema = z.object({
-  description: z.string().min(1, 'Description is required'),
-  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Version must follow semver format (e.g., 1.0.0)'),
-  author: z.string().min(1, 'Author is required'),
-  tags: z.array(z.string()).min(1, 'At least one tag is required')
-});
+// AsyncFunction constructor for validating async/await syntax
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 
-// Backend script specific metadata schema
-const backendScriptMetadataSchema = baseMetadataSchema.extend({
-  entryPoint: z.string().optional(),
-  dependencies: z.array(z.string()).optional(),
-  permissions: z.array(z.enum(['read', 'write', 'execute', 'admin'])).optional(),
-  schedule: z.object({
-    enabled: z.boolean(),
-    cron: z.string().optional(),
-    timezone: z.string().optional()
-  }).optional()
-});
-
-// Report metadata schema
-const reportMetadataSchema = baseMetadataSchema.extend({
-  category: z.enum(['financial', 'operational', 'analytics', 'custom']),
-  parameters: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['string', 'number', 'date', 'boolean']),
-    required: z.boolean(),
-    defaultValue: z.any().optional()
-  })).optional(),
-  refreshRate: z.number().min(0).optional()
-});
-
-// Page metadata schema
-const pageMetadataSchema = baseMetadataSchema.extend({
-  route: z.string().regex(/^\/[a-zA-Z0-9\-_\/]*$/, 'Route must be a valid path starting with /'),
-  permissions: z.array(z.string()).optional(),
-  layout: z.enum(['default', 'minimal', 'fullscreen']).optional(),
-  theme: z.string().optional()
-});
-
-// Field metadata schema
-const fieldMetadataSchema = baseMetadataSchema.extend({
-  fieldType: z.enum(['text', 'number', 'date', 'select', 'multiselect', 'boolean']),
-  required: z.boolean(),
-  validation: z.object({
-    minLength: z.number().optional(),
-    maxLength: z.number().optional(),
-    min: z.number().optional(),
-    max: z.number().optional(),
-    pattern: z.string().optional(),
-    options: z.array(z.string()).optional()
-  }).optional()
-});
-
-// Main metadata file schema (meta.json)
-const metadataFileSchema = z.object({
-  scope: z.string().min(1, 'Scope is required'),
-  generatedAt: z.string().datetime('Invalid datetime format'),
-  itemCount: z.number().min(0, 'Item count must be non-negative'),
-  items: z.array(z.object({
-    id: z.string().min(1, 'ID is required'),
-    name: z.string().min(1, 'Name is required'),
-    type: z.enum(['report', 'page', 'backend-script', 'field']),
-    file: z.string().min(1, 'File path is required'),
-    metadata: z.record(z.any()) // Will be validated separately based on type
-  })).min(0, 'Items array is required')
-});
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+}
 
 export interface ValidationError {
   file: string;
+  type: string;
   message: string;
   path?: string;
 }
 
-export interface ValidationResult {
-  isValid: boolean;
-  errors: ValidationError[];
+export interface ValidationWarning {
+  file: string;
+  type: string;
+  message: string;
 }
 
+export type CustomizationType = 'object' | 'action' | 'field' | 'backend-script' | 'report' | 'page' | 'unknown';
+
 export class ValidationService {
-  private fsService: FileSystemService;
+  private serviceLogger = logger.child('ValidationService');
 
-  constructor() {
-    this.fsService = new FileSystemService();
+  /**
+   * Detect customization type from file path
+   */
+  detectType(filePath: string): CustomizationType {
+    const normalized = filePath.replace(/\\/g, '/');
+    
+    if (normalized.includes('/objects/') && normalized.endsWith('/definition.json')) {
+      return 'object';
+    }
+    if (normalized.includes('/objects/') && normalized.includes('/actions/')) {
+      return 'action';
+    }
+    if (normalized.includes('/objects/') && normalized.includes('/fields/')) {
+      return 'field';
+    }
+    if (normalized.includes('/backend/')) {
+      return 'backend-script';
+    }
+    if (normalized.includes('/reports/')) {
+      return 'report';
+    }
+    if (normalized.includes('/pages/')) {
+      return 'page';
+    }
+    
+    return 'unknown';
   }
 
   /**
-   * Validate all metadata files in a source directory
+   * Validate a single file
    */
-  async validateMetadataFiles(sourceDir: string): Promise<ValidationResult> {
-    const errors: ValidationError[] = [];
-    
-    try {
-      // Find all meta.json files
-      const metadataFiles = await this.fsService.findMetadataFiles(sourceDir);
-      
-      if (metadataFiles.length === 0) {
-        errors.push({
-          file: sourceDir,
-          message: 'No metadata files found in source directory'
-        });
-        return { isValid: false, errors };
-      }
-
-      // Validate each metadata file
-      for (const metaFile of metadataFiles) {
-        const fileErrors = await this.validateMetadataFile(metaFile);
-        errors.push(...fileErrors);
-      }
-
-    } catch (error) {
-      errors.push({
-        file: sourceDir,
-        message: `Failed to scan directory: ${error instanceof Error ? error.message : 'Unknown error'}`
-      });
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors
+  async validateFile(filePath: string): Promise<ValidationResult> {
+    const result: ValidationResult = {
+      valid: true,
+      errors: [],
+      warnings: []
     };
-  }
 
-  /**
-   * Validate a single metadata file
-   */
-  private async validateMetadataFile(filePath: string): Promise<ValidationError[]> {
-    const errors: ValidationError[] = [];
-    
-    try {
-      // Read and parse the metadata file
-      const content = await fs.readJSON(filePath);
-      
-      // Validate the main structure
-      const mainValidation = metadataFileSchema.safeParse(content);
-      if (!mainValidation.success) {
-        for (const issue of mainValidation.error.issues) {
-          errors.push({
-            file: filePath,
-            message: `${issue.path.join('.')}: ${issue.message}`,
-            path: issue.path.join('.')
-          });
-        }
-        return errors; // If main structure is invalid, don't validate items
-      }
-
-      // Validate individual items based on their type
-      const metadata = mainValidation.data;
-      for (let i = 0; i < metadata.items.length; i++) {
-        const item = metadata.items[i];
-        const itemErrors = this.validateItemMetadata(item, `items[${i}]`);
-        
-        errors.push(...itemErrors.map(error => ({
-          ...error,
-          file: filePath,
-          path: error.path ? `items[${i}].${error.path}` : `items[${i}]`
-        })));
-      }
-
-    } catch (error) {
-      errors.push({
+    if (!await fs.pathExists(filePath)) {
+      result.valid = false;
+      result.errors.push({
         file: filePath,
-        message: `Failed to read or parse file: ${error instanceof Error ? error.message : 'Unknown error'}`
+        type: 'file',
+        message: 'File does not exist'
       });
+      return result;
     }
 
-    return errors;
-  }
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) {
+      result.valid = false;
+      result.errors.push({
+        file: filePath,
+        type: 'file',
+        message: 'Path is not a file'
+      });
+      return result;
+    }
 
-  /**
-   * Validate metadata for a specific item based on its type
-   */
-  private validateItemMetadata(item: any, basePath: string = ''): ValidationError[] {
-    const errors: ValidationError[] = [];
+    const type = this.detectType(filePath);
     
     try {
-      let schema;
-      
-      switch (item.type) {
-        case 'backend-script':
-          schema = backendScriptMetadataSchema;
+      switch (type) {
+        case 'object':
+          await this.validateObjectDefinition(filePath, result);
           break;
-        case 'report':
-          schema = reportMetadataSchema;
-          break;
-        case 'page':
-          schema = pageMetadataSchema;
+        case 'action':
+          await this.validateAction(filePath, result);
           break;
         case 'field':
-          schema = fieldMetadataSchema;
+          await this.validateField(filePath, result);
+          break;
+        case 'backend-script':
+          await this.validateBackendScript(filePath, result);
+          break;
+        case 'report':
+          await this.validateReport(filePath, result);
+          break;
+        case 'page':
+          await this.validatePage(filePath, result);
           break;
         default:
-          errors.push({
-            file: '',
-            message: `Unknown item type: ${item.type}`,
-            path: `${basePath}.type`
+          result.warnings.push({
+            file: filePath,
+            type: 'unknown',
+            message: 'Unknown customization type - skipping validation'
           });
-          return errors;
       }
-
-      const validation = schema.safeParse(item.metadata);
-      if (!validation.success) {
-        for (const issue of validation.error.issues) {
-          errors.push({
-            file: '',
-            message: issue.message,
-            path: `${basePath}.metadata.${issue.path.join('.')}`
-          });
-        }
-      }
-
     } catch (error) {
-      errors.push({
-        file: '',
-        message: `Failed to validate item metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        path: basePath
+      result.valid = false;
+      result.errors.push({
+        file: filePath,
+        type: 'validation',
+        message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
 
-    return errors;
+    return result;
   }
 
   /**
-   * Validate a single backend script metadata object
-   * This can be used for unit testing or standalone validation
+   * Validate all files in a project
    */
-  validateBackendScriptMetadata(metadata: any): ValidationResult {
-    const validation = backendScriptMetadataSchema.safeParse(metadata);
-    
-    if (validation.success) {
-      return { isValid: true, errors: [] };
+  async validateProject(projectPath: string): Promise<ValidationResult> {
+    const result: ValidationResult = {
+      valid: true,
+      errors: [],
+      warnings: []
+    };
+
+    const srcPath = path.join(projectPath, 'src');
+    if (!await fs.pathExists(srcPath)) {
+      result.valid = false;
+      result.errors.push({
+        file: projectPath,
+        type: 'project',
+        message: 'Not a valid project - src directory not found'
+      });
+      return result;
     }
 
-    const errors = validation.error.issues.map(issue => ({
-      file: 'inline',
-      message: issue.message,
-      path: issue.path.join('.')
-    }));
+    // Scan all files
+    const filesToValidate: string[] = [];
+    
+    const scanDir = async (dir: string) => {
+      if (!await fs.pathExists(dir)) return;
+      
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await scanDir(fullPath);
+        } else if (entry.isFile() && !entry.name.startsWith('.')) {
+          filesToValidate.push(fullPath);
+        }
+      }
+    };
 
-    return { isValid: false, errors };
+    await scanDir(srcPath);
+
+    // Validate each file
+    for (const file of filesToValidate) {
+      const fileResult = await this.validateFile(file);
+      result.errors.push(...fileResult.errors);
+      result.warnings.push(...fileResult.warnings);
+      if (!fileResult.valid) {
+        result.valid = false;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate only changed/new files in a project using hash cache
+   */
+  async validateChangedFiles(projectPath: string): Promise<ValidationResult> {
+    const result: ValidationResult = {
+      valid: true,
+      errors: [],
+      warnings: []
+    };
+
+    const srcPath = path.join(projectPath, 'src');
+    if (!await fs.pathExists(srcPath)) {
+      result.valid = false;
+      result.errors.push({
+        file: projectPath,
+        type: 'project',
+        message: 'Not a valid project - src directory not found'
+      });
+      return result;
+    }
+
+    // Get changed files using hash cache
+    const hashCache = new HashCacheService();
+    await hashCache.initialize(projectPath);
+    const changes = await hashCache.getChanges(projectPath);
+
+    // Collect files to validate (changed and new)
+    const filesToValidate: string[] = [];
+    
+    for (const files of Object.values(changes.changed)) {
+      for (const relPath of files) {
+        filesToValidate.push(path.join(projectPath, relPath));
+      }
+    }
+    
+    for (const files of Object.values(changes.new)) {
+      for (const relPath of files) {
+        filesToValidate.push(path.join(projectPath, relPath));
+      }
+    }
+
+    // If no changes, return success
+    if (filesToValidate.length === 0) {
+      this.serviceLogger.debug('No changed files to validate');
+      return result;
+    }
+
+    this.serviceLogger.debug('Validating changed files', { count: filesToValidate.length });
+
+    // Validate each changed file
+    for (const file of filesToValidate) {
+      const fileResult = await this.validateFile(file);
+      result.errors.push(...fileResult.errors);
+      result.warnings.push(...fileResult.warnings);
+      if (!fileResult.valid) {
+        result.valid = false;
+      }
+    }
+
+    return result;
+  }
+
+  // Validators for each customization type
+
+  private async validateObjectDefinition(filePath: string, result: ValidationResult): Promise<void> {
+    const content = await fs.readJSON(filePath);
+    
+    try {
+      ObjectDefinitionSchema.parse(content);
+    } catch (error: any) {
+      result.valid = false;
+      if (error.errors) {
+        error.errors.forEach((err: any) => {
+          result.errors.push({
+            file: filePath,
+            type: 'object',
+            message: `${err.path.join('.')}: ${err.message}`,
+            path: err.path.join('.')
+          });
+        });
+      } else {
+        result.errors.push({
+          file: filePath,
+          type: 'object',
+          message: error.message
+        });
+      }
+      return;
+    }
+
+    // Additional business logic validation
+    if (!content.name || content.name.trim() === '') {
+      result.errors.push({
+        file: filePath,
+        type: 'object',
+        message: 'Object name cannot be empty'
+      });
+      result.valid = false;
+    }
+
+    if (!content.fields || content.fields.length === 0) {
+      result.warnings.push({
+        file: filePath,
+        type: 'object',
+        message: 'Object has no fields defined'
+      });
+    }
+  }
+
+  private async validateAction(filePath: string, result: ValidationResult): Promise<void> {
+    // Actions can be .js (code) or .json (metadata)
+    if (filePath.endsWith('.js')) {
+      // Validate JavaScript syntax
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      if (content.trim() === '') {
+        result.warnings.push({
+          file: filePath,
+          type: 'action',
+          message: 'Action script is empty'
+        });
+      }
+      
+      // Basic syntax check
+      try {
+        // Try with AsyncFunction to support await
+        new AsyncFunction(content);
+      } catch (error: any) {
+        // Ignore top-level await errors since the runtime supports it
+        if (!error.message.includes('await is only valid in async functions')) {
+          result.errors.push({
+            file: filePath,
+            type: 'action',
+            message: `JavaScript syntax error: ${error.message}`
+          });
+          result.valid = false;
+        }
+      }
+    } else if (filePath.endsWith('.json')) {
+      const content = await fs.readJSON(filePath);
+      
+      try {
+        ActionMetadataSchema.parse(content);
+      } catch (error: any) {
+        result.valid = false;
+        if (error.errors) {
+          error.errors.forEach((err: any) => {
+            result.errors.push({
+              file: filePath,
+              type: 'action',
+              message: `${err.path.join('.')}: ${err.message}`,
+              path: err.path.join('.')
+            });
+          });
+        } else {
+          result.errors.push({
+            file: filePath,
+            type: 'action',
+            message: error.message
+          });
+        }
+      }
+    }
+  }
+
+  private async validateField(filePath: string, result: ValidationResult): Promise<void> {
+    const content = await fs.readJSON(filePath);
+    // relative to /src directory
+    const relativeFilePath = path.relative(path.dirname(path.dirname(path.dirname(filePath))), filePath).replace(/\\/g, '/');
+    // Basic field validation
+    if (!content.internal_name || content.internal_name.trim() === '') {
+      result.errors.push({
+        file: relativeFilePath,
+        type: 'field',
+        message: `Field internal_name is required (file: ${relativeFilePath})`
+      });
+      result.valid = false;
+    }
+
+    if (!content.type || content.type.trim() === '') {
+      result.errors.push({
+        file: filePath,
+        type: 'field',
+        message: 'Field type is required'
+      });
+      result.valid = false;
+    }
+  }
+
+  private async validateBackendScript(filePath: string, result: ValidationResult): Promise<void> {
+    if (filePath.endsWith('.js')) {
+      // Validate JavaScript
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      if (content.trim() === '') {
+        result.warnings.push({
+          file: filePath,
+          type: 'backend-script',
+          message: 'Backend script is empty'
+        });
+      }
+
+      // Check for syntax errors
+      try {
+        // Try with AsyncFunction to support await
+        new AsyncFunction(content);
+      } catch (error: any) {
+        // Ignore top-level await errors since the runtime supports it
+        if (!error.message.includes('await is only valid in async functions')) {
+          result.errors.push({
+            file: filePath,
+            type: 'backend-script',
+            message: `JavaScript syntax error: ${error.message}`
+          });
+          result.valid = false;
+        }
+      }
+    } else if (filePath.endsWith('.json')) {
+      const content = await fs.readJSON(filePath);
+      
+      try {
+        ScriptMetadataSchema.parse(content);
+      } catch (error: any) {
+        result.valid = false;
+        if (error.errors) {
+          error.errors.forEach((err: any) => {
+            result.errors.push({
+              file: filePath,
+              type: 'backend-script',
+              message: `${err.path.join('.')}: ${err.message}`,
+              path: err.path.join('.')
+            });
+          });
+        }
+      }
+    }
+  }
+
+  private async validateReport(filePath: string, result: ValidationResult): Promise<void> {
+    if (filePath.endsWith('.sql')) {
+      // Validate SQL
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      if (content.trim() === '') {
+        result.errors.push({
+          file: filePath,
+          type: 'report',
+          message: 'SQL query is empty'
+        });
+        result.valid = false;
+      }
+
+      // Basic SQL validation - check for common keywords
+      const upperContent = content.toUpperCase();
+      if (!upperContent.includes('SELECT') && !upperContent.includes('WITH')) {
+        result.warnings.push({
+          file: filePath,
+          type: 'report',
+          message: 'SQL query does not contain SELECT or WITH statement'
+        });
+      }
+    } else if (filePath.endsWith('.json')) {
+      const content = await fs.readJSON(filePath);
+      
+      try {
+        ReportMetadataSchema.parse(content);
+      } catch (error: any) {
+        result.valid = false;
+        if (error.errors) {
+          error.errors.forEach((err: any) => {
+            result.errors.push({
+              file: filePath,
+              type: 'report',
+              message: `${err.path.join('.')}: ${err.message}`,
+              path: err.path.join('.')
+            });
+          });
+        }
+      }
+    }
+  }
+
+  private async validatePage(filePath: string, result: ValidationResult): Promise<void> {
+    if (filePath.endsWith('.html')) {
+      // Validate HTML
+      const content = await fs.readFile(filePath, 'utf8');
+      
+      if (content.trim() === '') {
+        result.warnings.push({
+          file: filePath,
+          type: 'page',
+          message: 'HTML content is empty'
+        });
+      }
+
+      // Basic HTML validation - check for balanced tags
+      const openTags = (content.match(/<[^/][^>]*>/g) || []).length;
+      const closeTags = (content.match(/<\/[^>]+>/g) || []).length;
+      
+      if (openTags !== closeTags) {
+        result.warnings.push({
+          file: filePath,
+          type: 'page',
+          message: `Possibly unbalanced HTML tags (${openTags} open, ${closeTags} close)`
+        });
+      }
+    } else if (filePath.endsWith('.json')) {
+      const content = await fs.readJSON(filePath);
+      
+      try {
+        PageMetadataSchema.parse(content);
+      } catch (error: any) {
+        result.valid = false;
+        if (error.errors) {
+          error.errors.forEach((err: any) => {
+            result.errors.push({
+              file: filePath,
+              type: 'page',
+              message: `${err.path.join('.')}: ${err.message}`,
+              path: err.path.join('.')
+            });
+          });
+        }
+      }
+    }
   }
 }

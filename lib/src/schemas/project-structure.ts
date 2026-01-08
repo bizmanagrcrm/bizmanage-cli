@@ -88,7 +88,7 @@ export const ActionMetadataSchema = z.object({
   type: z.string().describe('Action type: custom-script, url, etc.'),
   group: z.string().nullable().optional(),
   value: z.any().optional(),
-  action_type: z.string().describe('Action type: quick_action, menu, etc.'),
+  action_type: z.string().nullable().optional().describe('Action type: quick_action, menu, etc.'),
   order: z.number().nullable().optional(),
   condition: z.any().nullable().optional(),
   email_field: z.string().nullable().optional(),

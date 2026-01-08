@@ -41,18 +41,18 @@ export const pushCommand = new Command()
 
       // Step 1: Validation
       if (!options.skipValidation) {
-        console.log(chalk.yellow('📋 Step 1: Validating metadata files...'));
+        console.log(chalk.yellow('📋 Step 1: Validating project files...'));
         const validationService = new ValidationService();
-        const validationResult = await validationService.validateMetadataFiles(options.source);
+        const validationResult = await validationService.validateProject(options.source);
         
-        if (!validationResult.isValid) {
+        if (!validationResult.valid) {
           console.log(chalk.red('❌ Validation failed:'));
-          validationResult.errors.forEach(error => {
+          validationResult.errors.forEach((error: any) => {
             console.log(chalk.red(`  • ${error.file}: ${error.message}`));
           });
           process.exit(1);
         }
-        console.log(chalk.green('✅ All metadata files are valid'));
+        console.log(chalk.green('✅ All project files are valid'));
         console.log();
       }
 

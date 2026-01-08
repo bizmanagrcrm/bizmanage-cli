@@ -126,6 +126,61 @@ bizmanage status
 bizmanage status
 ```
 
+### `bizmanage validate`
+
+Validate project files or a specific file for schema compliance and best practices. By default, only validates changed files for faster validation during development.
+
+```bash
+bizmanage validate [options]
+```
+
+**Options:**
+- `-f, --file <path>` - Validate a specific file instead of entire project
+- `-p, --path <path>` - Project path (default: current directory)
+- `-a, --all` - Validate all files (default: only changed files)
+
+**Features:**
+- **Smart validation** - By default, only validates changed/new files for faster feedback
+- **Auto-detection** - Automatically detects customization type from file path
+- **Schema validation** - Validates against Zod schemas for each customization type
+- **Business logic checks** - Additional validation rules beyond basic schema
+- **JavaScript syntax** - Checks for syntax errors in .js files (supports top-level await)
+- **SQL validation** - Basic SQL query validation for reports
+- **HTML validation** - Tag balance checking for pages
+- **Extensible** - Easy to add new validation rules per customization type
+
+**Customization Types Detected:**
+- `object` - Object definitions (definition.json)
+- `action` - Actions (.js and .json files)
+- `field` - Field definitions
+- `backend-script` - Backend scripts (.js and .json)
+- `report` - Reports (.sql and .json)
+- `page` - Pages (.html and .json)
+
+**Examples:**
+```bash
+# Validate only changed files (fast, recommended for development)
+bizmanage validate
+
+# Validate all files in the project (full check)
+bizmanage validate --all
+
+# Validate a specific file
+bizmanage validate -f src/backend/my-script.js
+
+# Validate a specific metadata file
+bizmanage validate -f src/objects/custom-table/definition.json
+
+# Validate project in a different directory
+bizmanage validate -p /path/to/project
+```
+
+**Output:**
+- ✅ Success with warnings count (if any)
+- ❌ Errors grouped by customization type
+- ⚠️ Warnings grouped by customization type
+- Validation errors include file path and specific issue location
+
 ### `bizmanage test`
 
 Test authentication and connection to the Bizmanage API.

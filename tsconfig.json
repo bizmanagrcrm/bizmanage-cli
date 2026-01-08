@@ -17,7 +17,8 @@
     "emitDecoratorMetadata": true,
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "moduleDetection": "force"
   },
   "include": [
     "lib/src/**/*"
