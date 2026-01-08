@@ -183,27 +183,13 @@ export type ReportMetadata = z.infer<typeof ReportMetadataSchema>;
  */
 export const PageMetadataSchema = z.object({
   name: z.string().describe('Page name'),
-  title: z.string().describe('Page title'),
-  description: z.string().optional().describe('Page description'),
-  slug: z.string().describe('URL slug'),
-  navigation: z.object({
-    showInMenu: z.boolean(),
-    menuTitle: z.string().optional(),
-    menuOrder: z.number().optional(),
-    parentPage: z.string().optional()
-  }).optional(),
-  permissions: z.array(z.string()).optional().describe('Required roles/permissions'),
-  layout: z.object({
-    template: z.string().optional(),
-    sidebar: z.boolean().optional(),
-    fullWidth: z.boolean().optional()
-  }).optional(),
-  assets: z.object({
-    css: z.array(z.string()).optional(),
-    js: z.array(z.string()).optional()
-  }).optional(),
-  lastModified: z.string().datetime(),
-  version: z.string()
+  version: z.number().describe('Page version'),
+  publihsed: z.boolean().optional().describe('Whether page is published (note: typo in API)'),
+  data: z.any().optional().describe('Page data object'),
+  access_policy: z.string().optional().describe('Access policy for the page'),
+  render_type: z.string().optional().describe('How the page should be rendered'),
+  url: z.string().optional().describe('Page URL path'),
+  max_version: z.number().optional().describe('Maximum version number')
 });
 
 export type PageMetadata = z.infer<typeof PageMetadataSchema>;

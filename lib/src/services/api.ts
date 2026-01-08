@@ -144,6 +144,22 @@ export interface BizmanageScriptResponse {
   modules: any;
 }
 
+/**
+ * API response interface for page from /restapi/admin/custom-pages?latest_only=true
+ */
+export interface BizmanagePageResponse {
+  id: number;
+  content: string;
+  version: number;
+  publihsed: boolean;
+  name: string;
+  data?: any;
+  access_policy?: string;
+  render_type?: string;
+  url?: string;
+  max_version?: number;
+}
+
 export class ApiService {
   private client: AxiosInstance;
   private config: AuthConfig;
@@ -333,12 +349,54 @@ export class ApiService {
   }
 
   /**
-   * Fetch custom pages
-   * TODO: Replace with actual API endpoint when available
+   * Fetch custom pages from the platform
+   * Endpoint: GET /restapi/admin/custom-pages?latest_only=true
    */
   async fetchPages(): Promise<BizmanagePage[]> {
-    // Placeholder - return empty array until we have the actual endpoint
-    return [];
+    await this.applyDelay();
+    
+    try {
+      const response = await this.client.get<BizmanagePageResponse[]>('/restapi/admin/custom-pages?latest_only=true');
+      
+      // Transform API response to our internal format
+      const pages: BizmanagePage[] = response.data
+        .filter(apiPage => {
+          // Skip pages without url (used as filename)
+          if (!apiPage.url) {
+            this.serviceLogger.warn('Skipping page without url', { id: apiPage.id, name: apiPage.name });
+            return false;
+          }
+          return true;
+        })
+        .map(apiPage => {
+          // Extract metadata (excluding id and content)
+          const metadata: PageMetadata = {
+            name: apiPage.name,
+            version: apiPage.version,
+            publihsed: apiPage.publihsed,
+            data: apiPage.data,
+            access_policy: apiPage.access_policy,
+            render_type: apiPage.render_type,
+            url: apiPage.url,
+            max_version: apiPage.max_version
+          };
+
+          return {
+            name: apiPage.url!, // Use url as the filename
+            html: apiPage.content || '',
+            metadata
+          };
+        });
+
+      this.serviceLogger.info(`Fetched ${pages.length} pages from API`);
+      return pages;
+    } catch (error) {
+      this.serviceLogger.error('Failed to fetch pages', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
 
   /**

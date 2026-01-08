@@ -370,33 +370,52 @@ export class ProjectStructureService {
       await fs.ensureDir(pagesPath);
 
       for (const page of pages) {
-        const pageName = this.sanitizeName(page.name);
+        try {
+          if (!page.name) {
+            this.serviceLogger.warn('Skipping page with undefined url/name', { metadata: page.metadata });
+            result.warnings.push('Skipped page with undefined url/name');
+            continue;
+          }
 
-        // Write HTML file
-        await this.hashCache.writeFileIfChanged(
-          projectPath,
-          path.join(pagesPath, `${pageName}.html`),
-          page.html,
-          'utf8'
-        );
+          const pageName = this.sanitizeName(page.name);
 
-        // Write metadata file
-        await this.hashCache.writeJSONIfChanged(
-          projectPath,
-          path.join(pagesPath, `${pageName}.meta.json`),
-          page.metadata,
-          { spaces: 2 }
-        );
+          // Write HTML file
+          await this.hashCache.writeFileIfChanged(
+            projectPath,
+            path.join(pagesPath, `${pageName}.html`),
+            page.html,
+            'utf8'
+          );
 
-        result.itemCount++;
+          // Write metadata file
+          await this.hashCache.writeJSONIfChanged(
+            projectPath,
+            path.join(pagesPath, `${pageName}.json`),
+            page.metadata,
+            { spaces: 2 }
+          );
+
+          result.itemCount++;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          const stack = error instanceof Error ? error.stack : undefined;
+          this.serviceLogger.error('Failed to write individual page', { 
+            pageName: page.name,
+            error: errorMsg,
+            stack 
+          });
+          result.warnings.push(`Failed to write page ${page.name || 'unknown'}: ${errorMsg}`);
+        }
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Pages written successfully`, { count: pages.length });
+      this.serviceLogger.info(`Pages written successfully`, { count: pages.length, itemCount: result.itemCount, warnings: result.warnings.length });
     } catch (error) {
       result.success = false;
-      result.errors.push(`Failed to write pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      this.serviceLogger.error('Failed to write pages', { error: error instanceof Error ? error.message : 'Unknown error' });
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const stack = error instanceof Error ? error.stack : undefined;
+      result.errors.push(`Failed to write pages: ${errorMsg}`);
+      this.serviceLogger.error('Failed to write pages', { error: errorMsg, stack });
     }
 
     return result;
@@ -724,7 +743,11 @@ export class ProjectStructureService {
     return items;
   }
 
-  private sanitizeName(name: string): string {
+  private sanitizeName(name: string | undefined | null): string {
+    if (!name) {
+      this.serviceLogger.warn('sanitizeName called with empty name, using fallback');
+      return 'unnamed';
+    }
     return name
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '-')
