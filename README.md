@@ -246,7 +246,7 @@ bizmanage pull --delay 500
 
 ### `bizmanage push`
 
-Upload local customizations to the platform with validation and testing.
+Push local customizations to Bizmanage platform with validation and testing. By default, only pushes changed files for faster deployment.
 
 ```bash
 bizmanage push [options]
@@ -254,20 +254,44 @@ bizmanage push [options]
 
 **Options:**
 - `-a, --alias <alias>` - Configuration alias to use (default: "default")
-- `-s, --source <path>` - Source directory (default: "./src")
+- `-s, --source <path>` - Source directory (default: current directory)
+- `--all` - Push all files (default: only changed files)
 - `--skip-tests` - Skip running tests before deploy
 - `--skip-validation` - Skip metadata validation
 
+**Features:**
+- **Smart deployment** - By default, only pushes changed/new files for faster deployments
+- **Type-specific push** - Each customization type (objects, actions, scripts, reports, pages) has its own push logic
+- **Hash tracking** - Successfully pushed files are marked as unchanged to avoid redundant pushes
+- **Validation** - Validates files before pushing (can be skipped with --skip-validation)
+- **Testing** - Runs npm test before pushing (can be skipped with --skip-tests)
+- **Detailed feedback** - Shows which files were pushed and any errors encountered
+
+**Push Process:**
+1. **Validation** - Validates changed files (or all files with --all)
+2. **Testing** - Runs npm test to ensure code quality
+3. **Deployment** - Pushes files to platform via API
+4. **Hash Update** - Updates file hashes after successful push
+
 **Examples:**
 ```bash
-# Standard push with validation and testing
+# Standard push - only changed files with validation and testing
 bizmanage push
 
-# Push skipping tests (not recommended for production)
+# Push all files (full deployment)
+bizmanage push --all
+
+# Push skipping tests (faster, but not recommended for production)
 bizmanage push --skip-tests
 
-# Push from custom source directory
-bizmanage push --source ./my-customizations
+# Push skipping validation and tests (development only)
+bizmanage push --skip-validation --skip-tests
+
+# Push to specific environment
+bizmanage push --alias production
+
+# Push from custom project directory
+bizmanage push --source /path/to/project
 ```
 
 ## Project Structure

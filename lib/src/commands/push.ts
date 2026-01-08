@@ -4,23 +4,26 @@ import ora from 'ora';
 import { spawn } from 'child_process';
 import path from 'path';
 import { AuthService } from '../services/auth.js';
-import { ApiService } from '../services/api.js';
-import { FileSystemService } from '../services/filesystem.js';
 import { ValidationService } from '../services/validation.js';
+import { PushService } from '../services/push.js';
+import { logger } from '../utils/logger.js';
 
 export const pushCommand = new Command()
   .name('push')
   .description('Push local customizations to Bizmanage platform with validation and testing')
   .option('-a, --alias <alias>', 'Configuration alias to use (default: default)', 'default')
-  .option('-s, --source <path>', 'Source directory (default: ./src)', './src')
+  .option('-s, --source <path>', 'Source directory (default: current directory)', '.')
+  .option('--all', 'Push all files (default: only changed files)')
   .option('--skip-tests', 'Skip running tests before deploy')
   .option('--skip-validation', 'Skip metadata validation')
   .action(async (options: { 
     alias: string; 
     source: string; 
+    all?: boolean;
     skipTests?: boolean; 
     skipValidation?: boolean; 
   }) => {
+    const commandLogger = logger.child('PushCommand');
     console.log(chalk.blue('⬆️  Pushing customizations to Bizmanage platform'));
     console.log();
 
@@ -34,25 +37,32 @@ export const pushCommand = new Command()
         process.exit(1);
       }
 
+      const projectPath = path.resolve(options.source);
+      const pushingAll = options.all === true;
+
       console.log(chalk.dim(`Using configuration: ${options.alias}`));
       console.log(chalk.dim(`Instance: ${config.instanceUrl}`));
-      console.log(chalk.dim(`Source directory: ${options.source}`));
+      console.log(chalk.dim(`Project path: ${projectPath}`));
+      console.log(chalk.dim(`Mode: ${pushingAll ? 'Push all files' : 'Push changed files only'}`));
       console.log();
 
       // Step 1: Validation
       if (!options.skipValidation) {
-        console.log(chalk.yellow('📋 Step 1: Validating project files...'));
+        const validationMode = pushingAll ? 'all project files' : 'changed files';
+        console.log(chalk.yellow(`📋 Step 1: Validating ${validationMode}...`));
         const validationService = new ValidationService();
-        const validationResult = await validationService.validateProject(options.source);
+        const validationResult = pushingAll
+          ? await validationService.validateProject(projectPath)
+          : await validationService.validateChangedFiles(projectPath);
         
         if (!validationResult.valid) {
           console.log(chalk.red('❌ Validation failed:'));
           validationResult.errors.forEach((error: any) => {
-            console.log(chalk.red(`  • ${error.file}: ${error.message}`));
+            console.log(chalk.red(`  • ${path.basename(error.file)}: ${error.message}`));
           });
           process.exit(1);
         }
-        console.log(chalk.green('✅ All project files are valid'));
+        console.log(chalk.green(`✅ Validation passed`));
         console.log();
       }
 
@@ -73,28 +83,58 @@ export const pushCommand = new Command()
       // Step 3: Deploy
       console.log(chalk.yellow('🚀 Step 3: Deploying to platform...'));
       
-      const fsService = new FileSystemService();
-      const apiService = new ApiService(config, 0);
+      const pushService = new PushService(config);
 
-      // Read local files and prepare payload
-      const spinner = ora('Reading local files...').start();
-      const customizations = await fsService.readCustomizations(options.source);
-      spinner.succeed(`Read ${customizations.length} customizations`);
-
-      // Deploy to platform
-      const deploySpinner = ora('Uploading to platform...').start();
+      // Push customizations
+      const pushSpinner = ora(pushingAll ? 'Pushing all files...' : 'Pushing changed files...').start();
       
       try {
-        // Mock API call to deploy customizations
-        await apiService.deployCustomizations(customizations);
-        deploySpinner.succeed('Deployment completed successfully');
+        const pushResult = pushingAll
+          ? await pushService.pushAllFiles(projectPath)
+          : await pushService.pushChangedFiles(projectPath);
+        
+        if (pushResult.pushedFiles.length === 0) {
+          pushSpinner.info(chalk.blue('No files to push - everything is up to date'));
+        } else if (pushResult.success) {
+          pushSpinner.succeed(chalk.green(`Successfully pushed ${pushResult.pushedFiles.length} file(s)`));
+          
+          // Show list of pushed files
+          if (pushResult.pushedFiles.length > 0) {
+            console.log(chalk.dim('\nPushed files:'));
+            pushResult.pushedFiles.forEach(file => {
+              console.log(chalk.dim(`  • ${file}`));
+            });
+          }
+        } else {
+          pushSpinner.fail(chalk.red('Push completed with errors'));
+          
+          // Show errors
+          if (pushResult.errors.length > 0) {
+            console.log();
+            console.log(chalk.red(`❌ ${pushResult.errors.length} error(s):`));
+            pushResult.errors.forEach(error => {
+              console.log(chalk.red(`  • ${error.file}: ${error.message}`));
+            });
+          }
+          
+          // Show successfully pushed files
+          if (pushResult.pushedFiles.length > 0) {
+            console.log();
+            console.log(chalk.yellow(`⚠️  ${pushResult.pushedFiles.length} file(s) pushed successfully before errors:`));
+            pushResult.pushedFiles.forEach(file => {
+              console.log(chalk.dim(`  • ${file}`));
+            });
+          }
+          
+          process.exit(1);
+        }
         
         console.log();
         console.log(chalk.green('🎉 Push completed successfully!'));
-        console.log(chalk.dim(`Deployed ${customizations.length} customizations to ${config.instanceUrl}`));
+        console.log(chalk.dim(`Deployed to ${config.instanceUrl}`));
         
       } catch (error) {
-        deploySpinner.fail('Deployment failed');
+        pushSpinner.fail('Push failed');
         throw error;
       }
 
