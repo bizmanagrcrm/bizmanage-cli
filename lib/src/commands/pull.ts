@@ -93,8 +93,7 @@ export const pullCommand = new Command()
         objects: 0,
         backendScripts: 0,
         reports: 0,
-        pages: 0,
-        scripts: 0
+        pages: 0
       };
 
       // Step 1: First fetch tables from Bizmanage API
@@ -206,29 +205,41 @@ export const pullCommand = new Command()
         }
       }
 
-      // Pull backend scripts
-      const backendSpinner = ora('Fetching backend scripts...').start();
-      try {
-        const scripts = await apiService.fetchBackendScripts();
-        backendSpinner.text = `Processing backend scripts (${scripts.length} items)...`;
-        
-        const scriptResult = await projectService.writeBackendScripts(projectPath, scripts);
-        
-        if (scriptResult.success) {
-          results.backendScripts = scriptResult.itemCount;
-          backendSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
-        } else {
-          backendSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
+      // Step 4: Fetch actions for each table
+      let totalActions = 0;
+      if (tables.length > 0) {
+        const actionsSpinner = ora('Fetching actions for tables...').start();
+        try {
+          for (let i = 0; i < tables.length; i++) {
+            const table = tables[i];
+            const tableName = table.internal_name || table.display_name;
+            actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tables.length})...`;
+            
+            try {
+              const actions = await apiService.fetchActions(tableName);
+              
+              if (actions.length > 0) {
+                const actionResult = await projectService.writeActions(projectPath, tableName, actions);
+                if (actionResult.success) {
+                  totalActions += actionResult.itemCount;
+                } else {
+                  actionsSpinner.warn(`${chalk.yellow('⚠️')} Failed to write actions for ${tableName}`);
+                }
+              }
+            } catch (error) {
+              // Don't fail the entire pull if one table's actions can't be fetched
+              actionsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch actions for ${tableName}`);
+            }
+          }
+          
+          actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tables.length} tables`);
+        } catch (error) {
+          actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           serviceLogger.info('');
-          serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
+          serviceLogger.error(chalk.red(`❌ Pull failed during actions processing: ${errorMessage}`));
           process.exit(1);
         }
-      } catch (error) {
-        backendSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.info('');
-        serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
-        process.exit(1);
       }
 
       // Pull reports
@@ -281,28 +292,28 @@ export const pullCommand = new Command()
         process.exit(1);
       }
 
-      // Pull scripts
-      const scriptsSpinner = ora('Fetching scripts...').start();
+      // Pull backend scripts
+      const backendScriptsSpinner = ora('Fetching backend scripts...').start();
       try {
-        const scripts = await apiService.fetchScripts();
-        scriptsSpinner.text = `Processing scripts (${scripts.length} items)...`;
+        const backendScripts = await apiService.fetchScripts();
+        backendScriptsSpinner.text = `Processing backend scripts (${backendScripts.length} items)...`;
         
-        const scriptResult = await projectService.writeScripts(projectPath, scripts);
+        const scriptResult = await projectService.writeScripts(projectPath, backendScripts);
         
         if (scriptResult.success) {
-          results.scripts = scriptResult.itemCount;
-          scriptsSpinner.succeed(`${chalk.green('✓')} Scripts: ${results.scripts} items processed`);
+          results.backendScripts = scriptResult.itemCount;
+          backendScriptsSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
         } else {
-          scriptsSpinner.fail(`${chalk.red('✗')} Scripts: ${scriptResult.errors.join(', ')}`);
+          backendScriptsSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
           serviceLogger.info('');
-          serviceLogger.error(chalk.red(`❌ Pull failed during scripts processing: ${scriptResult.errors.join(', ')}`));
+          serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
           process.exit(1);
         }
       } catch (error) {
-        scriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch scripts`);
+        backendScriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         serviceLogger.info('');
-        serviceLogger.error(chalk.red(`❌ Pull failed during scripts fetching: ${errorMessage}`));
+        serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
         process.exit(1);
       }
 
@@ -326,15 +337,15 @@ export const pullCommand = new Command()
       // If we reach this point, everything succeeded
       serviceLogger.info(chalk.green('🎉 Pull completed successfully!'));
       
-      const totalItems = results.objects + results.backendScripts + results.reports + results.pages + results.scripts + totalFields;
+      const totalItems = results.objects + results.backendScripts + results.reports + results.pages + totalFields + totalActions;
       serviceLogger.info(chalk.dim(`Total items: ${totalItems}`));
       serviceLogger.info(chalk.dim(`  • Tables Found: ${results.tables}`));
       serviceLogger.info(chalk.dim(`  • Objects Processed: ${results.objects}`));
       serviceLogger.info(chalk.dim(`  • Fields Processed: ${totalFields}`));
+      serviceLogger.info(chalk.dim(`  • Actions Processed: ${totalActions}`));
       serviceLogger.info(chalk.dim(`  • Backend Scripts: ${results.backendScripts}`));
       serviceLogger.info(chalk.dim(`  • Reports: ${results.reports}`));
       serviceLogger.info(chalk.dim(`  • Pages: ${results.pages}`));
-      serviceLogger.info(chalk.dim(`  • Scripts: ${results.scripts}`));
       serviceLogger.info('');
       serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`));
 

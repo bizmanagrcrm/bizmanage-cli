@@ -181,6 +181,34 @@ export interface BizmanageReportResponse {
   query?: string; // SQL query for the report
 }
 
+/**
+ * API response interface for action from /restapi/customization/actions/:table_name
+ */
+export interface BizmanageActionResponse {
+  id: number;
+  table_name: string;
+  is_hidden?: {
+    dash?: boolean;
+    grid?: boolean;
+  };
+  title: string;
+  action_name: string;
+  deleted_ref: any;
+  color: string | null;
+  icon: string | null;
+  type: string; // 'custom-script', 'url', etc.
+  group: string | null;
+  value: any;
+  custom_script?: string; // Only present if type === 'custom-script'
+  action_type: string; // 'quick_action', 'menu', etc.
+  order: number | null;
+  condition: any;
+  email_field: string | null;
+  link?: string; // For url type actions
+  multiRows?: boolean;
+  is_system?: boolean;
+}
+
 export class ApiService {
   private client: AxiosInstance;
   private config: AuthConfig;
@@ -259,6 +287,59 @@ export class ApiService {
   }
 
   /**
+   * Fetch actions for a specific table
+   * Endpoint: GET /restapi/customization/actions/:table_name
+   * Response format: { display_name: string, menus: BizmanageActionResponse[] }
+   */
+  async fetchActions(tableName: string): Promise<BizmanageAction[]> {
+    try {
+      await this.applyDelay();
+      this.serviceLogger.debug(`Fetching actions for table: ${tableName}`);
+      const response = await this.client.get(`/restapi/customization/actions/${tableName}`);
+      
+      // Response is an object with { display_name, menus } where menus contains the actions
+      const responseData = response.data;
+      
+      if (!responseData || typeof responseData !== 'object') {
+        this.serviceLogger.warn(`Invalid response format for ${tableName}`);
+        return [];
+      }
+      
+      const menus = responseData.menus;
+      
+      if (!Array.isArray(menus)) {
+        this.serviceLogger.warn(`No menus array found for ${tableName}`);
+        return [];
+      }
+      
+      this.serviceLogger.debug(`Fetched ${menus.length} actions for ${tableName}`);
+      
+      // Transform API response to our internal format
+      const actions: BizmanageAction[] = menus.map((apiAction: BizmanageActionResponse) => {
+        // Extract metadata (excluding id and custom_script)
+        const { id, custom_script, ...metadata } = apiAction;
+        
+        const action: BizmanageAction = {
+          name: apiAction.action_name,
+          metadata: metadata as ActionMetadata
+        };
+        
+        // Only include code if type is 'custom-script' and custom_script exists
+        if (apiAction.type === 'custom-script' && apiAction.custom_script) {
+          action.code = apiAction.custom_script;
+        }
+        
+        return action;
+      });
+      
+      return actions;
+    } catch (error: any) {
+      this.serviceLogger.error(`Failed to fetch actions for ${tableName}: ${error.response?.data?.message || error.message}`);
+      throw new Error(`Failed to fetch actions for ${tableName}: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  /**
    * Convert Bizmanage table response to our object format
    * This method transforms the API response into our internal structure
    */
@@ -299,21 +380,24 @@ export class ApiService {
         .filter(filter => filter.is_custom) // Only convert custom filters to actions
         .forEach(filter => {
           const actionMetadata: ActionMetadata = {
-            label: filter.text,
-            description: `Custom filter: ${filter.text}`,
-            type: 'configuration',
-            permissions: ['user'],
-            placement: { context: 'toolbar' },
-            lastModified: new Date().toISOString(),
-            version: '1.0.0'
+            title: filter.text,
+            action_name: filter.name,
+            type: filter.type || 'configuration',
+            action_type: 'toolbar',
+            icon: null,
+            color: null,
+            deleted_ref: null,
+            group: null,
+            value: null,
+            order: null,
+            condition: null,
+            email_field: null,
+            table_name: table.internal_name
           };
 
           // Add filter-specific configuration
           if (filter.type === 'search_match' && filter.otherTable) {
-            actionMetadata.httpConfig = {
-              url: `/api/search/${filter.otherTable}`,
-              method: 'GET'
-            };
+            actionMetadata.link = `/api/search/${filter.otherTable}`;
           }
 
           actions.push({
@@ -349,15 +433,6 @@ export class ApiService {
     } catch (error: any) {
       throw new Error(`Failed to fetch objects: ${error.message}`);
     }
-  }
-
-  /**
-   * Fetch backend scripts
-   * TODO: Replace with actual API endpoint when available
-   */
-  async fetchBackendScripts(): Promise<BizmanageBackendScript[]> {
-    // Placeholder - return empty array until we have the actual endpoint
-    return [];
   }
 
   /**

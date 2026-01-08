@@ -171,6 +171,60 @@ export class ProjectStructureService {
   }
 
   /**
+   * Write actions for a specific table
+   */
+  async writeActions(
+    projectPath: string,
+    tableName: string,
+    actions: Array<{
+      name: string;
+      code?: string;
+      metadata: ActionMetadata;
+    }>
+  ): Promise<PullResult> {
+    const result: PullResult = { success: true, itemCount: 0, errors: [], warnings: [] };
+    const actionsDir = path.join(projectPath, 'src', 'objects', this.sanitizeName(tableName), 'actions');
+
+    try {
+      await this.hashCache.initialize(projectPath);
+      await fs.ensureDir(actionsDir);
+
+      for (const action of actions) {
+        const actionName = this.sanitizeName(action.name);
+
+        // Write code file if present (for custom-script type)
+        if (action.code) {
+          await this.hashCache.writeFileIfChanged(
+            projectPath,
+            path.join(actionsDir, `${actionName}.js`),
+            action.code,
+            'utf8'
+          );
+        }
+
+        // Write metadata JSON file
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
+          path.join(actionsDir, `${actionName}.json`),
+          action.metadata,
+          { spaces: 2 }
+        );
+
+        result.itemCount++;
+      }
+
+      await this.hashCache.save();
+      result.success = true;
+    } catch (error) {
+      result.success = false;
+      result.errors.push(error instanceof Error ? error.message : 'Unknown error');
+      this.serviceLogger.error('Failed to write actions', { tableName, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+
+    return result;
+  }
+
+  /**
    * Write objects (tables/views) with their definitions and actions
    */
   async writeObjects(

@@ -72,46 +72,29 @@ export const ObjectDefinitionSchema = z.object({
 export type ObjectDefinition = z.infer<typeof ObjectDefinitionSchema>;
 
 /**
- * Schema for action metadata files (*.meta.json)
+ * Schema for action metadata files (*.json)
  */
 export const ActionMetadataSchema = z.object({
-  label: z.string().describe('Display label for the action'),
-  description: z.string().optional().describe('Action description'),
-  type: z.enum(['javascript', 'http', 'link', 'configuration']).describe('Action type'),
-  icon: z.string().optional().describe('Icon identifier'),
-  permissions: z.array(z.string()).optional().describe('Required permissions/roles'),
-  placement: z.object({
-    context: z.enum(['row', 'bulk', 'toolbar', 'menu']).describe('Where the action appears'),
-    order: z.number().optional().describe('Display order')
+  table_name: z.string().optional(),
+  is_hidden: z.object({
+    dash: z.boolean().optional(),
+    grid: z.boolean().optional()
   }).optional(),
-  conditions: z.object({
-    fieldConditions: z.array(z.object({
-      field: z.string(),
-      operator: z.enum(['equals', 'not_equals', 'contains', 'empty', 'not_empty']),
-      value: z.any().optional()
-    })).optional(),
-    recordState: z.enum(['new', 'existing', 'any']).optional()
-  }).optional(),
-  parameters: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['string', 'number', 'boolean', 'select']),
-    label: z.string(),
-    required: z.boolean().optional(),
-    defaultValue: z.any().optional(),
-    options: z.array(z.object({
-      value: z.any(),
-      label: z.string()
-    })).optional()
-  })).optional(),
-  // For HTTP/Link actions
-  httpConfig: z.object({
-    url: z.string(),
-    method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
-    headers: z.record(z.string()).optional(),
-    openInNewWindow: z.boolean().optional()
-  }).optional(),
-  lastModified: z.string().datetime(),
-  version: z.string()
+  title: z.string().describe('Display title for the action'),
+  action_name: z.string().describe('Internal action name'),
+  deleted_ref: z.any().nullable().optional(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  type: z.string().describe('Action type: custom-script, url, etc.'),
+  group: z.string().nullable().optional(),
+  value: z.any().optional(),
+  action_type: z.string().describe('Action type: quick_action, menu, etc.'),
+  order: z.number().nullable().optional(),
+  condition: z.any().nullable().optional(),
+  email_field: z.string().nullable().optional(),
+  link: z.string().optional(), // For url type actions
+  multiRows: z.boolean().optional(),
+  is_system: z.boolean().optional()
 });
 
 export type ActionMetadata = z.infer<typeof ActionMetadataSchema>;
