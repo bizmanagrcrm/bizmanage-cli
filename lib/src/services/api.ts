@@ -160,6 +160,27 @@ export interface BizmanagePageResponse {
   max_version?: number;
 }
 
+/**
+ * API response interface for report from /restapi/c-reports/list-with-sql
+ */
+export interface BizmanageReportResponse {
+  id: number;
+  internal_name: string;
+  display_name: string;
+  params?: Array<{
+    input_type: string;
+    [key: string]: any;
+  }>;
+  report_type: string;
+  deleted_ref: any;
+  settings: any;
+  to_users: any;
+  to_user_roles: any;
+  created_by: number;
+  created_at: string;
+  query?: string; // SQL query for the report
+}
+
 export class ApiService {
   private client: AxiosInstance;
   private config: AuthConfig;
@@ -340,12 +361,56 @@ export class ApiService {
   }
 
   /**
-   * Fetch custom reports
-   * TODO: Replace with actual API endpoint when available
+   * Fetch custom reports with SQL
+   * Endpoint: GET /restapi/c-reports/list-with-sql
    */
   async fetchReports(): Promise<BizmanageReport[]> {
-    // Placeholder - return empty array until we have the actual endpoint
-    return [];
+    await this.applyDelay();
+    
+    try {
+      const response = await this.client.get<BizmanageReportResponse[]>('/restapi/c-reports/list-with-sql');
+      
+      // Transform API response to our internal format
+      const reports: BizmanageReport[] = response.data
+        .filter(apiReport => {
+          // Skip reports without internal_name
+          if (!apiReport.internal_name) {
+            this.serviceLogger.warn('Skipping report without internal_name', { id: apiReport.id, display_name: apiReport.display_name });
+            return false;
+          }
+          return true;
+        })
+        .map(apiReport => {
+          // Extract metadata (excluding id and sql)
+          const metadata: ReportMetadata = {
+            internal_name: apiReport.internal_name,
+            display_name: apiReport.display_name,
+            params: apiReport.params,
+            report_type: apiReport.report_type,
+            deleted_ref: apiReport.deleted_ref,
+            settings: apiReport.settings,
+            to_users: apiReport.to_users,
+            to_user_roles: apiReport.to_user_roles,
+            created_by: apiReport.created_by,
+            created_at: apiReport.created_at
+          };
+
+          return {
+            name: apiReport.internal_name, // Use internal_name as the filename
+            sql: apiReport.query || '', // SQL query from 'query' field
+            metadata
+          };
+        });
+
+      this.serviceLogger.info(`Fetched ${reports.length} reports from API`);
+      return reports;
+    } catch (error) {
+      this.serviceLogger.error('Failed to fetch reports', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    }
   }
 
   /**

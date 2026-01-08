@@ -301,7 +301,7 @@ export class ProjectStructureService {
   }
 
   /**
-   * Write reports
+   * Write reports - creates both .sql and .json files for each report
    */
   async writeReports(
     projectPath: string,
@@ -329,10 +329,10 @@ export class ProjectStructureService {
           'utf8'
         );
 
-        // Write metadata file
+        // Write metadata JSON file
         await this.hashCache.writeJSONIfChanged(
           projectPath,
-          path.join(reportsPath, `${reportName}.meta.json`),
+          path.join(reportsPath, `${reportName}.json`),
           report.metadata,
           { spaces: 2 }
         );

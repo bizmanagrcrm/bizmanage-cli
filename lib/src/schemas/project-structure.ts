@@ -148,32 +148,18 @@ export type BackendScriptMetadata = z.infer<typeof BackendScriptMetadataSchema>;
  * Schema for report metadata files
  */
 export const ReportMetadataSchema = z.object({
-  name: z.string().describe('Report name'),
-  description: z.string().optional().describe('Report description'),
-  category: z.string().optional().describe('Report category'),
-  parameters: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['string', 'number', 'date', 'boolean', 'select']),
-    label: z.string(),
-    required: z.boolean().optional(),
-    defaultValue: z.any().optional(),
-    options: z.array(z.object({
-      value: z.any(),
-      label: z.string()
-    })).optional()
-  })).optional(),
-  permissions: z.array(z.string()).optional().describe('Required roles/permissions'),
-  format: z.object({
-    type: z.enum(['table', 'chart', 'pdf']).optional(),
-    chartType: z.enum(['bar', 'line', 'pie', 'area']).optional()
-  }).optional(),
-  scheduling: z.object({
-    enabled: z.boolean(),
-    cron: z.string().optional(),
-    recipients: z.array(z.string()).optional()
-  }).optional(),
-  lastModified: z.string().datetime(),
-  version: z.string()
+  internal_name: z.string().describe('Report internal name'),
+  display_name: z.string().describe('Report display name'),
+  params: z.array(z.object({
+    input_type: z.string(),
+  }).passthrough()).optional().describe('Report parameters'),
+  report_type: z.string().describe('Report type'),
+  deleted_ref: z.any().nullable().optional(),
+  settings: z.any().nullable().optional(),
+  to_users: z.any().nullable().optional(),
+  to_user_roles: z.any().nullable().optional(),
+  created_by: z.number().optional(),
+  created_at: z.string().optional()
 });
 
 export type ReportMetadata = z.infer<typeof ReportMetadataSchema>;
