@@ -1,19 +1,21 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import path from 'path';
 import { AuthService } from '../services/auth.js';
 
 export const logoutCommand = new Command()
   .name('logout')
   .description('Logout from Bizmanage platform by deleting saved API key')
   .option('-a, --alias <alias>', 'Configuration alias to remove (default: default)', 'default')
+  .option('-p, --project <path>', 'Remove credentials from project directory instead of global config')
   .option('--all', 'Remove all stored API keys and configurations')
-  .action(async (options: { alias: string; all?: boolean }) => {
+  .action(async (options: { alias: string; project?: string; all?: boolean }) => {
     console.log(chalk.blue('🔓 Bizmanage CLI Logout'));
     console.log(chalk.dim('This will delete your saved API key and configuration'));
     console.log();
 
     try {
-      const authService = new AuthService();
+      const authService = new AuthService(options.project ? path.resolve(options.project) : undefined);
 
       if (options.all) {
         // Check if any configurations exist

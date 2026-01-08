@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
+import path from 'path';
 import { AuthService } from '../services/auth.js';
 import { BizmanageService } from '../services/bizmanage.js';
 import { logger } from '../utils/logger.js';
@@ -10,9 +11,10 @@ export const loginCommand = new Command()
   .name('login')
   .description('Login to Bizmanage platform by saving API key and testing authentication')
   .option('-a, --alias <alias>', 'Configuration alias (default: default)', 'default')
+  .option('-p, --project <path>', 'Save credentials to project directory instead of global config')
   .action(async (options) => {
     const commandLogger = logger.child('login');
-    commandLogger.debug('Starting login command', { alias: options.alias });
+    commandLogger.debug('Starting login command', { alias: options.alias, project: options.project });
     
     console.log(chalk.blue('🔐 Bizmanage CLI Login'));
     console.log(chalk.dim('This will save your API key and test authentication using /restapi/ping'));
@@ -73,7 +75,7 @@ export const loginCommand = new Command()
         commandLogger.info('Authentication successful, saving configuration');
         
         // Save API key and configuration
-        const authService = new AuthService();
+        const authService = new AuthService(options.project ? path.resolve(options.project) : undefined);
         await authService.saveConfig(options.alias, {
           instanceUrl: answers.instanceUrl,
           apiKey: answers.apiKey
@@ -81,14 +83,18 @@ export const loginCommand = new Command()
 
         commandLogger.success('Login completed successfully', {
           alias: options.alias,
-          instanceUrl: answers.instanceUrl
+          instanceUrl: answers.instanceUrl,
+          projectLocal: !!options.project
         });
 
+        const configLocation = options.project ? `project directory (${path.resolve(options.project)})` : 'global config';
+        
         console.log();
         console.log(chalk.green(`🎉 Login successful!`));
         console.log(chalk.green(`   Alias: ${chalk.bold(options.alias)}`));
         console.log(chalk.green(`   API Key: Saved securely`));
-        console.log(chalk.dim(`   Config location: ${authService.getConfigPath()}`));
+        console.log(chalk.dim(`   Config location: ${configLocation}`));
+        console.log(chalk.dim(`   Config file: ${authService.getConfigPath()}`));
         console.log();
         console.log(chalk.blue(`💡 Use 'bizmanage test' to verify your connection anytime`));
         console.log(chalk.blue(`💡 Use 'bizmanage logout' to remove saved credentials`));

@@ -20,7 +20,8 @@ export const pullCommand = new Command()
     serviceLogger.info('');
 
     try {
-      const authService = new AuthService();
+      const projectPath = path.resolve(options.output);
+      const authService = new AuthService(projectPath);
       const config = await authService.getConfig(options.alias);
 
       if (!config) {
@@ -61,7 +62,6 @@ export const pullCommand = new Command()
       const projectService = new ProjectStructureService();
       
       // Check if this is a new project or existing one
-      const projectPath = path.resolve(options.output);
       const isExistingProject = await projectService.isValidProject(projectPath);
       
       if (options.init || !isExistingProject) {

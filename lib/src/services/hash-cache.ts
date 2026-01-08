@@ -126,7 +126,8 @@ export class HashCacheService {
     }
 
     const spaces = options.spaces ?? 2;
-    const content = JSON.stringify(data, null, spaces);
+    // fs.writeJSON adds a trailing newline, so we need to match that in our hash
+    const content = JSON.stringify(data, null, spaces) + '\n';
     
     if (await this.shouldWriteFile(projectPath, filePath, content)) {
       await fs.ensureDir(path.dirname(filePath));
@@ -171,5 +172,110 @@ export class HashCacheService {
       totalFiles: Object.keys(this.cache?.hashes || {}).length,
       cacheHits: 0 // This would need tracking in shouldWriteFile to be accurate
     };
+  }
+
+  /**
+   * Check for changes in project files compared to cache
+   * Returns object with changed, new, and deleted files categorized by type
+   */
+  async getChanges(projectPath: string): Promise<{
+    changed: Record<string, string[]>;
+    new: Record<string, string[]>;
+    deleted: Record<string, string[]>;
+    total: { changed: number; new: number; deleted: number };
+  }> {
+    if (!this.cache) {
+      await this.initialize(projectPath);
+    }
+
+    const changes = {
+      changed: {} as Record<string, string[]>,
+      new: {} as Record<string, string[]>,
+      deleted: {} as Record<string, string[]>,
+      total: { changed: 0, new: 0, deleted: 0 }
+    };
+
+    const srcPath = path.join(projectPath, 'src');
+    if (!await fs.pathExists(srcPath)) {
+      return changes;
+    }
+
+    // Get all current files in the project
+    const currentFiles = new Set<string>();
+    const filesByType: Record<string, string[]> = {
+      objects: [],
+      backend: [],
+      reports: [],
+      pages: []
+    };
+
+    // Scan project structure
+    const scanDir = async (dir: string, type: string) => {
+      if (!await fs.pathExists(dir)) return;
+      
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await scanDir(fullPath, type);
+        } else if (entry.isFile() && entry.name !== '.gitignore') {
+          const relPath = this.getRelativePath(projectPath, fullPath);
+          currentFiles.add(relPath);
+          filesByType[type].push(relPath);
+        }
+      }
+    };
+
+    await Promise.all([
+      scanDir(path.join(srcPath, 'objects'), 'objects'),
+      scanDir(path.join(srcPath, 'backend'), 'backend'),
+      scanDir(path.join(srcPath, 'reports'), 'reports'),
+      scanDir(path.join(srcPath, 'pages'), 'pages')
+    ]);
+
+    // Check for changed and new files
+    for (const [type, files] of Object.entries(filesByType)) {
+      for (const relPath of files) {
+        const fullPath = path.join(projectPath, relPath);
+        try {
+          const content = await fs.readFile(fullPath, 'utf8');
+          const currentHash = this.calculateHash(content);
+          const cachedHash = this.cache!.hashes[relPath];
+
+          if (!cachedHash) {
+            // New file
+            if (!changes.new[type]) changes.new[type] = [];
+            changes.new[type].push(relPath);
+            changes.total.new++;
+          } else if (cachedHash !== currentHash) {
+            // Changed file
+            if (!changes.changed[type]) changes.changed[type] = [];
+            changes.changed[type].push(relPath);
+            changes.total.changed++;
+          }
+        } catch (error) {
+          // File might be deleted or inaccessible
+          this.serviceLogger.warn('Failed to read file for change detection', { file: relPath });
+        }
+      }
+    }
+
+    // Check for deleted files
+    const cachedFiles = Object.keys(this.cache!.hashes);
+    for (const cachedPath of cachedFiles) {
+      if (!currentFiles.has(cachedPath) && cachedPath.startsWith('src/')) {
+        // Determine type from path
+        let type = 'objects';
+        if (cachedPath.includes('/backend/')) type = 'backend';
+        else if (cachedPath.includes('/reports/')) type = 'reports';
+        else if (cachedPath.includes('/pages/')) type = 'pages';
+
+        if (!changes.deleted[type]) changes.deleted[type] = [];
+        changes.deleted[type].push(cachedPath);
+        changes.total.deleted++;
+      }
+    }
+
+    return changes;
   }
 }
