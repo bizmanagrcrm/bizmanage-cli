@@ -677,6 +677,43 @@ export class ApiService {
       };
     }
   }
+
+  /**
+   * Push object/table definition to the platform
+   * POST /restapi/customization/view
+   */
+  async pushObjectDefinition(definition: any): Promise<any> {
+    try {
+      await this.applyDelay();
+      
+      this.serviceLogger.debug('Pushing object definition', { 
+        internal_name: definition.internal_name,
+        display_name: definition.display_name 
+      });
+
+      const response = await this.client.post('/restapi/customization/view', definition);
+      
+      this.serviceLogger.info('Successfully pushed object definition', {
+        internal_name: definition.internal_name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push object definition', {
+        internal_name: definition.internal_name,
+        status: error.response?.status,
+        message: error.response?.data?.message || error.message
+      });
+      
+      if (error.response) {
+        throw new Error(
+          `Failed to push object definition: ${error.response.data?.message || error.response.statusText}`
+        );
+      }
+      throw error;
+    }
+  }
 }
 
 /**

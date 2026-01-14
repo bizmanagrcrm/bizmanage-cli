@@ -153,9 +153,11 @@ async function runTests(): Promise<boolean> {
   return new Promise((resolve) => {
     const spinner = ora('Running npm test...').start();
     
+    // Use shell: true to handle npm on Windows (npm.cmd) and Unix (npm)
     const testProcess = spawn('npm', ['test'], {
       cwd: process.cwd(),
-      stdio: 'pipe'
+      stdio: 'pipe',
+      shell: true
     });
 
     let output = '';

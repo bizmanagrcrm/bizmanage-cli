@@ -196,19 +196,30 @@ export class PushService {
   }
 
   /**
-   * Push object definition
+   * Push object definition to /restapi/customization/view
    */
   private async pushObject(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/objects or PUT /api/objects/{id}
-    this.serviceLogger.info('Pushing object', { path: file.relativePath });
+    this.serviceLogger.info('Pushing object definition', { path: file.relativePath });
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // const objectData = JSON.parse(file.content);
-    // await this.apiService.client.post('/api/objects', objectData);
+    try {
+      // Parse the definition file
+      const definition = JSON.parse(file.content);
+      
+      // The definition should already be in the correct API format
+      // with fields like: display_name, internal_name, icon, etc.
+      await this.apiService.pushObjectDefinition(definition);
+      
+      this.serviceLogger.debug('Successfully pushed object definition', { 
+        internal_name: definition.internal_name,
+        display_name: definition.display_name 
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push object definition', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**
