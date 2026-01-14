@@ -9,6 +9,7 @@ import { createTestCommand } from './commands/test.js';
 import { statusCommand } from './commands/status.js';
 import { statusDetailCommand } from './commands/status-detail.js';
 import { validateCommand } from './commands/validate.js';
+import { clearCacheCommand } from './commands/clear-cache.js';
 import { Logger, LogLevel, logger } from './utils/logger.js';
 
 const program = new Command();
@@ -68,6 +69,7 @@ export function cli() {
   program.addCommand(pullCommand);
   program.addCommand(pushCommand);
   program.addCommand(validateCommand);
+  program.addCommand(clearCacheCommand);
 
   // Handle unknown commands
   program.on('command:*', () => {

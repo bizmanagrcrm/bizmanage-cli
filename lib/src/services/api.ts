@@ -688,7 +688,8 @@ export class ApiService {
       
       this.serviceLogger.debug('Pushing object definition', { 
         internal_name: definition.internal_name,
-        display_name: definition.display_name 
+        display_name: definition.display_name,
+        payload: JSON.stringify(definition, null, 2)
       });
 
       const response = await this.client.post('/restapi/customization/view', definition);
@@ -703,13 +704,17 @@ export class ApiService {
       this.serviceLogger.error('Failed to push object definition', {
         internal_name: definition.internal_name,
         status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
         message: error.response?.data?.message || error.message
       });
       
       if (error.response) {
-        throw new Error(
-          `Failed to push object definition: ${error.response.data?.message || error.response.statusText}`
-        );
+        const errorMsg = error.response.data?.message 
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push object definition: ${errorMsg}`);
       }
       throw error;
     }

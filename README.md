@@ -10,6 +10,7 @@ A command-line interface tool for building customizations for the Bizmanage SaaS
 - 📋 **Metadata Validation** - Strict schema validation using Zod
 - 🧪 **Testing Integration** - Automatic test execution before deployment
 - 📁 **Organized Structure** - Clean file organization with metadata files
+- 🔄 **Smart Caching** - Hash-based change detection for efficient syncing with cache management
 
 ## Installation
 
@@ -108,22 +109,167 @@ bizmanage logout --alias production
 bizmanage logout --all
 ```
 
+### `bizmanage init`
+
+Initialize a new Bizmanage project structure with all necessary directories and configuration files.
+
+```bash
+bizmanage init [project-name] [options]
+```
+
+**Arguments:**
+- `[project-name]` - Optional project name. If not provided, you'll be prompted to enter one.
+
+**Options:**
+- `-a, --alias <alias>` - Configuration alias to use (default: "default")
+- `--force` - Overwrite existing project files
+
+**How it works:**
+1. Prompts for project name (if not provided) and description
+2. Creates project directory structure (`src/objects`, `src/backend`, `src/reports`, `src/pages`)
+3. Generates `bizmanage.config.json` with project metadata
+4. Creates `.gitignore` file configured for Bizmanage projects
+5. Sets up `.bizmanage` directory for cache and internal files
+
+**Created Structure:**
+```
+project-name/
+├── src/
+│   ├── objects/
+│   ├── backend/
+│   ├── reports/
+│   └── pages/
+├── .bizmanage/          # Cache and internal files (auto-created)
+├── bizmanage.config.json # Project configuration
+└── .gitignore           # Pre-configured ignore rules
+```
+
+**Examples:**
+```bash
+# Interactive setup (prompts for name)
+bizmanage init
+
+# Initialize with project name
+bizmanage init my-project
+
+# Initialize in current directory
+bizmanage init . --force
+
+# Initialize with specific environment alias
+bizmanage init my-project --alias production
+```
+
 ### `bizmanage status`
 
 Show current login status and saved API keys.
 
 ```bash
-bizmanage status
+bizmanage status [options]
 ```
+
+**Options:**
+- `-p, --path <path>` - Project path (default: current directory)
+- `--auth-only` - Show only authentication status
+- `--changes-only` - Show only file changes
 
 **Shows:**
 - All saved configuration aliases
 - Instance URLs for each alias
 - Masked API keys (for security)
+- File change statistics (changed, new, deleted files)
+- Changes grouped by type (objects, backend scripts, reports, pages)
 
-**Example:**
+**Examples:**
 ```bash
+# Full status (auth + changes)
 bizmanage status
+
+# Show only authentication info
+bizmanage status --auth-only
+
+# Show only file changes
+bizmanage status --changes-only
+
+# Check status in different project
+bizmanage status -p /path/to/project
+```
+
+### `bizmanage status-detail`
+
+Show detailed authentication, connection, and project status with comprehensive information.
+
+```bash
+bizmanage status-detail [options]
+```
+
+**Options:**
+- `-a, --alias <alias>` - Configuration alias to check (default: "default")
+- `--project` - Show detailed project status if in a project directory
+- `--api` - Test API endpoints and show available data
+
+**Shows:**
+- Detailed configuration information
+- API connection test results
+- Project metadata (name, description, created date)
+- Last pull/push timestamps
+- Local item counts by type
+- Available API endpoints (with --api flag)
+
+**Examples:**
+```bash
+# Basic detailed status
+bizmanage status-detail
+
+# Check specific alias
+bizmanage status-detail --alias production
+
+# Include project information
+bizmanage status-detail --project
+
+# Test API endpoints
+bizmanage status-detail --api
+
+# Full detailed report
+bizmanage status-detail --project --api
+```
+
+### `bizmanage clear-cache`
+
+Clear the hash cache, making all files behave as if they are new. This is useful when you want to force a complete re-sync of all files on the next pull or push operation.
+
+```bash
+bizmanage clear-cache [options]
+```
+
+**Aliases:**
+- `bizmanage rm-cache`
+- `bizmanage cache-clear`
+
+**Options:**
+- `-p, --path <path>` - Project path (default: current directory)
+
+**How it works:**
+1. Removes all file hashes from the cache (`.bizmanage/file-hashes.json`)
+2. Shows statistics about how many files were cleared
+3. Next pull/push will treat all files as new/changed
+
+**When to use:**
+- Force a complete re-sync of all files
+- After manually modifying files outside the CLI
+- Troubleshooting sync issues
+- Reset after resolving merge conflicts
+
+**Examples:**
+```bash
+# Clear cache in current directory
+bizmanage clear-cache
+
+# Clear cache in specific project
+bizmanage clear-cache -p /path/to/project
+
+# Using aliases
+bizmanage rm-cache
+bizmanage cache-clear
 ```
 
 ### `bizmanage validate`
