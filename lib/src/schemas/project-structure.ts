@@ -28,46 +28,49 @@ export const BizmanageProjectConfigSchema = z.object({
 export type BizmanageProjectConfig = z.infer<typeof BizmanageProjectConfigSchema>;
 
 /**
- * Schema for object definition.json files
+ * Schema for object definition.json files (raw API format)
+ * This matches the format returned by GET /restapi/customization/tables?internal_name=<name>
+ * with id and meta fields (created_by, updated_by, created_at, updated_at) removed
  */
 export const ObjectDefinitionSchema = z.object({
-  name: z.string().describe('Object/table name'),
-  type: z.enum(['table', 'view']).describe('Object type'),
-  fields: z.array(z.object({
-    name: z.string(),
+  internal_name: z.string().describe('Internal table/object name'),
+  display_name: z.string().describe('Display name for the table'),
+  system: z.boolean().optional().describe('Whether this is a system table'),
+  search_enabled: z.boolean().optional(),
+  icon: z.string().nullable().optional(),
+  show_on_menu: z.boolean().nullable().optional(),
+  related_to: z.any().nullable().optional(),
+  data: z.any().nullable().optional(),
+  token: z.string().nullable().optional(),
+  orderBy: z.object({
+    clm: z.string(),
+    order: z.enum(['asc', 'desc'])
+  }).nullable().optional(),
+  filters: z.any().nullable().optional(),
+  desc: z.string().nullable().optional(),
+  bcg_color: z.string().nullable().optional(),
+  grids: z.any().nullable().optional(),
+  available_filters: z.array(z.object({
     type: z.string(),
-    label: z.string().optional(),
-    required: z.boolean().optional(),
-    defaultValue: z.any().optional(),
-    validation: z.object({
-      min: z.number().optional(),
-      max: z.number().optional(),
-      pattern: z.string().optional(),
-      options: z.array(z.string()).optional()
-    }).optional()
-  })).describe('Field definitions'),
-  settings: z.object({
-    displayName: z.string().optional(),
-    description: z.string().optional(),
-    icon: z.string().optional(),
-    sorting: z.object({
-      field: z.string(),
-      direction: z.enum(['asc', 'desc'])
-    }).optional(),
-    pagination: z.object({
-      defaultPageSize: z.number(),
-      allowedPageSizes: z.array(z.number())
-    }).optional(),
-    permissions: z.object({
-      create: z.array(z.string()).optional(),
-      read: z.array(z.string()).optional(),
-      update: z.array(z.string()).optional(),
-      delete: z.array(z.string()).optional()
-    }).optional()
-  }).optional(),
-  lastModified: z.string().datetime(),
-  version: z.string()
-});
+    text: z.string(),
+    name: z.string(),
+    hide: z.boolean().optional(),
+    is_custom: z.boolean().optional(),
+    field_internal_name: z.string().optional(),
+    field: z.string().optional(),
+    otherTable: z.string().optional(),
+    otherColumnDisplay: z.string().optional()
+  })).nullable().optional(),
+  has_comments: z.boolean().nullable().optional(),
+  table_name: z.string().nullable().optional(),
+  set_filters: z.any().nullable().optional(),
+  deleted_ref: z.any().nullable().optional(),
+  availableEventsForWH: z.array(z.object({
+    event_name: z.string(),
+    display_name: z.string()
+  })).optional(),
+  read_only: z.boolean().optional()
+}).passthrough();
 
 export type ObjectDefinition = z.infer<typeof ObjectDefinitionSchema>;
 

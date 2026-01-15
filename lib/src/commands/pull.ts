@@ -139,16 +139,43 @@ export const pullCommand = new Command()
 
       serviceLogger.info(''); // Add spacing after tables section
 
-      // Step 2: Convert tables to objects and process them
-      const objectsSpinner = ora('Converting tables to objects and processing actions...').start();
+      // Step 2: Fetch full table definitions and process them
+      const objectsSpinner = ora('Fetching full table definitions...').start();
       try {
-        const objects = tables.map(table => apiService.convertTableToObject(table));
+        const objects: Array<{
+          name: string;
+          definition: any;
+          actions: Array<{
+            name: string;
+            code?: string;
+            metadata: any;
+          }>;
+        }> = [];
+        
+        // Fetch full definition for each table
+        for (let i = 0; i < tables.length; i++) {
+          const table = tables[i];
+          const tableName = table.internal_name || table.display_name;
+          objectsSpinner.text = `Fetching definition for ${tableName} (${i + 1}/${tables.length})...`;
+          
+          try {
+            const fullDefinition = await apiService.fetchTableDefinition(tableName);
+            objects.push({
+              name: tableName,
+              definition: fullDefinition,
+              actions: [] // Actions will be fetched separately
+            });
+          } catch (error) {
+            objectsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch definition for ${tableName}`);
+          }
+        }
+        
         objectsSpinner.text = `Processing objects (${objects.length} items)...`;
         
         if (objects.length === 0) {
           objectsSpinner.warn(`${chalk.yellow('⚠️')} Objects: No objects to process`);
         } else {
-          const objectResult = await projectService.writeObjects(projectPath, objects);
+          const objectResult = await projectService.writeObjectsWithRawDefinitions(projectPath, objects);
           
           if (objectResult.success) {
             results.objects = objectResult.itemCount;

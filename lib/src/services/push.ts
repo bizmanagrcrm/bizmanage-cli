@@ -196,22 +196,27 @@ export class PushService {
   }
 
   /**
-   * Push object definition to /restapi/customization/view
+   * Push object definition to /restapi/customization/view-by-internal-name
    */
   private async pushObject(file: CustomizationFile): Promise<void> {
     this.serviceLogger.info('Pushing object definition', { path: file.relativePath });
     
     try {
-      // Parse the definition file
+      // Parse the definition file (raw API format)
       const definition = JSON.parse(file.content);
       
-      // The definition should already be in the correct API format
-      // with fields like: display_name, internal_name, icon, etc.
+      // The definition.json now contains the raw API response format
+      // We just need to ensure internal_name is present for the push
+      if (!definition.internal_name) {
+        throw new Error('Object definition missing required field: internal_name');
+      }
+      
+      // Push the definition as-is (it's already in the API format)
       await this.apiService.pushObjectDefinition(definition);
       
       this.serviceLogger.debug('Successfully pushed object definition', { 
         internal_name: definition.internal_name,
-        display_name: definition.display_name 
+        display_name: definition.display_name
       });
     } catch (error) {
       this.serviceLogger.error('Failed to push object definition', {

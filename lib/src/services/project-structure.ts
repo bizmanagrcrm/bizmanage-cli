@@ -225,6 +225,85 @@ export class ProjectStructureService {
   }
 
   /**
+   * Write objects with raw API definitions (keeping original field names)
+   */
+  async writeObjectsWithRawDefinitions(
+    projectPath: string,
+    objects: Array<{
+      name: string;
+      definition: any; // Raw API response
+      actions: Array<{
+        name: string;
+        code?: string;
+        metadata: ActionMetadata;
+      }>;
+    }>
+  ): Promise<PullResult> {
+    const result: PullResult = { success: true, itemCount: 0, errors: [], warnings: [] };
+    const objectsPath = path.join(projectPath, 'src', 'objects');
+
+    try {
+      await this.hashCache.initialize(projectPath);
+      await fs.ensureDir(objectsPath);
+
+      for (const obj of objects) {
+        const objectDir = path.join(objectsPath, this.sanitizeName(obj.name));
+        await fs.ensureDir(objectDir);
+
+        // Write definition.json with raw definition (id and meta fields already removed)
+        await this.hashCache.writeJSONIfChanged(
+          projectPath,
+          path.join(objectDir, 'definition.json'),
+          obj.definition,
+          { spaces: 2 }
+        );
+
+        // Write actions
+        if (obj.actions && obj.actions.length > 0) {
+          const actionsDir = path.join(objectDir, 'actions');
+          await fs.ensureDir(actionsDir);
+
+          for (const action of obj.actions) {
+            const actionName = this.sanitizeName(action.name);
+
+            // Write code file if present
+            if (action.code) {
+              const ext = this.getActionFileExtension(action.metadata.type);
+              await this.hashCache.writeFileIfChanged(
+                projectPath,
+                path.join(actionsDir, `${actionName}${ext}`),
+                action.code,
+                'utf8'
+              );
+            }
+
+            // Write metadata file
+            await this.hashCache.writeJSONIfChanged(
+              projectPath,
+              path.join(actionsDir, `${actionName}.meta.json`),
+              action.metadata,
+              { spaces: 2 }
+            );
+
+            result.itemCount++;
+          }
+        }
+
+        result.itemCount++;
+      }
+
+      await this.hashCache.save();
+      this.serviceLogger.info(`Objects written successfully`, { count: objects.length });
+    } catch (error) {
+      result.success = false;
+      result.errors.push(`Failed to write objects: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.serviceLogger.error('Failed to write objects', { error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+
+    return result;
+  }
+
+  /**
    * Write objects (tables/views) with their definitions and actions
    */
   async writeObjects(

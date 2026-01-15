@@ -22,7 +22,7 @@ export interface Customization {
 // New interfaces for the project structure
 export interface BizmanageObject {
   name: string;
-  definition: ObjectDefinition;
+  definition: any; // Can be either ObjectDefinition or raw API format
   actions: BizmanageAction[];
 }
 
@@ -264,6 +264,42 @@ export class ApiService {
   }
 
   /**
+   * Fetch full table definition by internal name
+   * Endpoint: GET /restapi/customization/tables?internal_name=[table name]
+   */
+  async fetchTableDefinition(tableName: string): Promise<any> {
+    try {
+      await this.applyDelay();
+      this.serviceLogger.debug(`Fetching table definition for: ${tableName}`);
+      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}`);
+      
+      // Response should be an array with one item, or a single object
+      const tableData = Array.isArray(response.data) ? response.data[0] : response.data;
+      
+      if (!tableData) {
+        throw new Error(`No table definition found for ${tableName}`);
+      }
+      
+      this.serviceLogger.debug(`Fetched definition for ${tableName}`);
+      
+      // Remove id and meta fields like created_by, updated_by, created_at, updated_at
+      const { 
+        id, 
+        created_by, 
+        updated_by, 
+        created_at, 
+        updated_at,
+        ...cleanedDefinition 
+      } = tableData;
+      
+      return cleanedDefinition;
+    } catch (error: any) {
+      this.serviceLogger.error(`Failed to fetch table definition for ${tableName}: ${error.response?.data?.message || error.message}`);
+      throw new Error(`Failed to fetch table definition for ${tableName}: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  /**
    * Fetch fields for a specific table
    */
   async fetchFields(tableName: string): Promise<BizmanageField[]> {
@@ -341,81 +377,23 @@ export class ApiService {
 
   /**
    * Convert Bizmanage table response to our object format
-   * This method transforms the API response into our internal structure
+   * Note: This method is deprecated. Use fetchTableDefinition() instead for pull operations.
+   * @deprecated
    */
   convertTableToObject(table: BizmanageTableResponse): BizmanageObject {
-    // Determine if it's a system table or custom table
-    const isSystemTable = table.system === true;
-    const tableType = isSystemTable ? 'table' : 'table'; // Could be 'view' based on other criteria
+    // Remove meta fields (only id and created_by are in BizmanageTableResponse)
+    const { id, created_by, created_at, ...definition } = table;
     
-    // Create object definition from table data
-    const definition: ObjectDefinition = {
-      name: table.internal_name,
-      type: tableType,
-      fields: [], // TODO: We'll need another endpoint to get field definitions
-      settings: {
-        displayName: table.display_name,
-        description: table.desc || undefined,
-        icon: table.icon || undefined,
-        sorting: table.orderBy ? {
-          field: table.orderBy.clm,
-          direction: table.orderBy.order
-        } : undefined,
-        permissions: {
-          read: ['user'], // Default permissions, TODO: get from actual permissions
-          create: ['user'],
-          update: ['user'],
-          delete: ['admin']
-        }
-      },
-      lastModified: table.created_at ? new Date(table.created_at).toISOString() : new Date().toISOString(),
-      version: '1.0.0'
-    };
-
-    // Convert available filters to actions (custom filters can be seen as configuration actions)
-    const actions: BizmanageAction[] = [];
-    
-    if (table.available_filters) {
-      table.available_filters
-        .filter(filter => filter.is_custom) // Only convert custom filters to actions
-        .forEach(filter => {
-          const actionMetadata: ActionMetadata = {
-            title: filter.text,
-            action_name: filter.name,
-            type: filter.type || 'configuration',
-            action_type: 'toolbar',
-            icon: null,
-            color: null,
-            deleted_ref: null,
-            group: null,
-            value: null,
-            order: null,
-            condition: null,
-            email_field: null,
-            table_name: table.internal_name
-          };
-
-          // Add filter-specific configuration
-          if (filter.type === 'search_match' && filter.otherTable) {
-            actionMetadata.link = `/api/search/${filter.otherTable}`;
-          }
-
-          actions.push({
-            name: filter.name,
-            metadata: actionMetadata
-          });
-        });
-    }
-
     return {
       name: table.internal_name,
       definition,
-      actions
+      actions: []
     };
   }
 
   /**
    * Fetch objects (tables/views) with their definitions and actions
+   * @deprecated Use fetchTableDefinition() for individual tables instead
    */
   async fetchObjects(): Promise<BizmanageObject[]> {
     try {
@@ -424,9 +402,9 @@ export class ApiService {
       // Convert tables to our object format
       const objects = tables.map(table => this.convertTableToObject(table));
       
-      // Filter out tables that don't have meaningful data for our use case
+      // Filter out tables that don't have meaningful data
       return objects.filter(obj => 
-        obj.definition.settings?.displayName && 
+        obj.definition?.display_name && 
         obj.name // Ensure we have basic required fields
       );
       
@@ -692,7 +670,7 @@ export class ApiService {
         payload: JSON.stringify(definition, null, 2)
       });
 
-      const response = await this.client.post('/restapi/customization/view', definition);
+      const response = await this.client.post('/restapi/customization/view-by-internal-name', definition);
       
       this.serviceLogger.info('Successfully pushed object definition', {
         internal_name: definition.internal_name,

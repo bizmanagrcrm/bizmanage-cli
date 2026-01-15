@@ -281,22 +281,23 @@ export class ValidationService {
       return;
     }
 
-    // Additional business logic validation
-    if (!content.name || content.name.trim() === '') {
+    // Additional business logic validation (raw API format)
+    if (!content.internal_name || content.internal_name.trim() === '') {
       result.errors.push({
         file: filePath,
         type: 'object',
-        message: 'Object name cannot be empty'
+        message: 'Object internal_name cannot be empty'
       });
       result.valid = false;
     }
-
-    if (!content.fields || content.fields.length === 0) {
-      result.warnings.push({
+    
+    if (!content.display_name || content.display_name.trim() === '') {
+      result.errors.push({
         file: filePath,
         type: 'object',
-        message: 'Object has no fields defined'
+        message: 'Object display_name cannot be empty'
       });
+      result.valid = false;
     }
   }
 
