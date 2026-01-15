@@ -697,6 +697,58 @@ export class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Push field definition to the platform
+   * POST /restapi/customization/field-by-internal-name
+   */
+  async pushFieldDefinition(tableName: string, field: BizmanageField): Promise<any> {
+    try {
+      await this.applyDelay();
+      
+      // Remove id from field and add table parameter
+      const { id, ...fieldWithoutId } = field as any;
+      const payload = {
+        table: tableName,
+        ...fieldWithoutId
+      };
+      
+      this.serviceLogger.debug('Pushing field definition', { 
+        table: tableName,
+        internal_name: field.internal_name || field.name,
+        field_name: field.name,
+        payload: JSON.stringify(payload, null, 2)
+      });
+
+      const response = await this.client.post('/restapi/customization/field-by-internal-name', payload);
+      
+      this.serviceLogger.info('Successfully pushed field definition', {
+        table: tableName,
+        internal_name: field.internal_name || field.name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push field definition', {
+        table: tableName,
+        internal_name: field.internal_name || field.name,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+      
+      if (error.response) {
+        const errorMsg = error.response.data?.message 
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push field definition for ${tableName}: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
 }
 
 /**

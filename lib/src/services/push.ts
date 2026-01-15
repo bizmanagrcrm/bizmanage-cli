@@ -246,19 +246,45 @@ export class PushService {
   }
 
   /**
-   * Push field definition
+   * Push field definition to /restapi/customization/field-by-internal-name
    */
   private async pushField(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/fields or PUT /api/fields/{id}
     this.serviceLogger.info('Pushing field', { path: file.relativePath });
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // const fieldData = JSON.parse(file.content);
-    // await this.apiService.client.post('/api/fields', fieldData);
+    try {
+      // Parse the field JSON file
+      const fieldData = JSON.parse(file.content);
+      
+      // Extract table name from path: src/objects/{tableName}/fields/{fieldName}.json
+      const normalized = file.relativePath.replace(/\\/g, '/');
+      const match = normalized.match(/objects\/([^/]+)\/fields\//);
+      
+      if (!match) {
+        throw new Error(`Cannot extract table name from path: ${file.relativePath}`);
+      }
+      
+      const tableName = match[1];
+      
+      // Validate required fields
+      if (!fieldData.internal_name) {
+        throw new Error('Field definition missing required field: internal_name');
+      }
+      
+      // Push the field using the ApiService method
+      await this.apiService.pushFieldDefinition(tableName, fieldData);
+      
+      this.serviceLogger.debug('Successfully pushed field', { 
+        table: tableName,
+        internal_name: fieldData.internal_name,
+        field_name: fieldData.field
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push field', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**
