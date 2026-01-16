@@ -228,21 +228,85 @@ export class PushService {
   }
 
   /**
-   * Push action (code + metadata)
+   * Push action (metadata + optional code) to /restapi/customization/action
    */
   private async pushAction(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/actions or PUT /api/actions/{id}
     this.serviceLogger.info('Pushing action', { path: file.relativePath });
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // await this.apiService.client.post('/api/actions', {
-    //   code: file.content,
-    //   metadata: file.metadata
-    // });
+    try {
+      let metadata: any;
+      let code: string | undefined;
+      
+      // Determine if this is a .json metadata file or .js code file
+      if (file.filePath.endsWith('.json')) {
+        // This is the metadata file
+        metadata = JSON.parse(file.content);
+        
+        // Always check for corresponding .js file (not just for custom-script type)
+        const codePath = file.filePath.replace('.json', '.js');
+        if (await fs.pathExists(codePath)) {
+          code = await fs.readFile(codePath, 'utf8');
+          this.serviceLogger.debug('Found corresponding code file', { codePath });
+        }
+      } else if (file.filePath.endsWith('.js')) {
+        // This is a code file, load corresponding metadata
+        const metadataPath = file.filePath.replace('.js', '.json');
+        if (await fs.pathExists(metadataPath)) {
+          metadata = await fs.readJSON(metadataPath);
+          code = file.content;
+        } else {
+          throw new Error(`Metadata file not found for action code: ${metadataPath}`);
+        }
+      } else {
+        throw new Error(`Unsupported action file type: ${file.filePath}`);
+      }
+      
+      // Extract table name from path: src/objects/{tableName}/actions/{actionName}.json
+      const normalized = file.relativePath.replace(/\\/g, '/');
+      const match = normalized.match(/objects\/([^/]+)\/actions\//);
+      
+      if (!match) {
+        throw new Error(`Cannot extract table name from path: ${file.relativePath}`);
+      }
+      
+      const tableName = match[1];
+      
+      // Add table_name to metadata if not present
+      if (!metadata.table_name) {
+        metadata.table_name = tableName;
+        this.serviceLogger.debug('Added table_name to action metadata', { table_name: tableName });
+      }
+      
+      // If we have code, include it in the metadata as custom_script
+      if (code) {
+        metadata.custom_script = code;
+        this.serviceLogger.debug('Added custom_script to action metadata', { 
+          table_name: tableName,
+          action_name: metadata.action_name,
+          code_length: code.length 
+        });
+      }
+      
+      // Validate required fields
+      if (!metadata.action_name) {
+        throw new Error('Action definition missing required field: action_name');
+      }
+      
+      // Push the action using the ApiService method (passing metadata only now)
+      await this.apiService.pushActionDefinition(metadata, code);
+      
+      this.serviceLogger.debug('Successfully pushed action', { 
+        table_name: metadata.table_name,
+        action_name: metadata.action_name,
+        has_code: !!code
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push action', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**

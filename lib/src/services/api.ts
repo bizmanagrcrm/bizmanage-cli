@@ -749,6 +749,62 @@ export class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Push action definition to the platform
+   * POST /restapi/customization/action
+   */
+  async pushActionDefinition(metadata: ActionMetadata, code?: string): Promise<any> {
+    try {
+      await this.applyDelay();
+      
+      // Remove id from metadata if present
+      const { id, ...metadataWithoutId } = metadata as any;
+      
+      // Build payload - include custom_script only if type is 'custom-script' and code is provided
+      const payload: any = { ...metadataWithoutId };
+      
+      if (metadata.type === 'custom-script' && code) {
+        payload.custom_script = code;
+      }
+      
+      this.serviceLogger.debug('Pushing action definition', { 
+        table_name: metadata.table_name,
+        action_name: metadata.action_name,
+        type: metadata.type,
+        has_code: !!code,
+        payload: JSON.stringify(payload, null, 2)
+      });
+
+      const response = await this.client.post('/restapi/customization/action', payload);
+      
+      this.serviceLogger.info('Successfully pushed action definition', {
+        table_name: metadata.table_name,
+        action_name: metadata.action_name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push action definition', {
+        table_name: metadata.table_name,
+        action_name: metadata.action_name,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+      
+      if (error.response) {
+        const errorMsg = error.response.data?.message 
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push action definition for ${metadata.table_name}.${metadata.action_name}: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
 }
 
 /**
