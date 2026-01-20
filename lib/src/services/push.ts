@@ -355,18 +355,59 @@ export class PushService {
    * Push backend script (code + metadata)
    */
   private async pushBackendScript(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/scripts or PUT /api/scripts/{id}
     this.serviceLogger.info('Pushing backend script', { path: file.relativePath });
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // await this.apiService.client.post('/api/scripts', {
-    //   code: file.content,
-    //   metadata: file.metadata
-    // });
+    try {
+      let metadata: any;
+      let code: string;
+      
+      // Determine if this is a .json metadata file or .js code file
+      if (file.filePath.endsWith('.json')) {
+        // This is the metadata file
+        metadata = JSON.parse(file.content);
+        
+        // Check for corresponding .js file
+        const codePath = file.filePath.replace('.json', '.js');
+        if (await fs.pathExists(codePath)) {
+          code = await fs.readFile(codePath, 'utf8');
+          this.serviceLogger.debug('Found corresponding code file', { codePath });
+        } else {
+          throw new Error(`Code file not found for backend script: ${codePath}`);
+        }
+      } else if (file.filePath.endsWith('.js')) {
+        // This is a code file, load corresponding metadata
+        const metadataPath = file.filePath.replace('.js', '.json');
+        if (await fs.pathExists(metadataPath)) {
+          metadata = await fs.readJSON(metadataPath);
+          code = file.content;
+        } else {
+          throw new Error(`Metadata file not found for backend script code: ${metadataPath}`);
+        }
+      } else {
+        throw new Error(`Unsupported backend script file type: ${file.filePath}`);
+      }
+      
+      // Validate required fields
+      if (!metadata.name) {
+        throw new Error('Backend script metadata missing required field: name');
+      }
+      
+      // Push the backend script using the ApiService method
+      await this.apiService.pushBackendScript(metadata, code);
+      
+      this.serviceLogger.debug('Successfully pushed backend script', { 
+        name: metadata.name,
+        method: metadata.method,
+        active: metadata.active,
+        code_length: code.length
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push backend script', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**

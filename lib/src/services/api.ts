@@ -805,6 +805,66 @@ export class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Push backend script to the platform
+   * POST /restapi/be-scripts/script-by-internal-name
+   */
+  async pushBackendScript(metadata: BackendScriptMetadata, code: string): Promise<any> {
+    try {
+      await this.applyDelay();
+      
+      // Remove id from metadata if present
+      const { id, ...metadataWithoutId } = metadata as any;
+      
+      // Build payload with name, script, method, and active
+      const payload = {
+        name: metadataWithoutId.name,
+        script: code,
+        method: metadataWithoutId.method || 'POST',
+        active: metadataWithoutId.active !== undefined ? metadataWithoutId.active : true,
+        description: metadataWithoutId.description || null,
+        is_public: metadataWithoutId.is_public || false,
+        crontab: metadataWithoutId.crontab || null,
+        timeout: metadataWithoutId.timeout || null,
+        modules: metadataWithoutId.modules || []
+      };
+      
+      this.serviceLogger.debug('Pushing backend script', { 
+        name: payload.name,
+        method: payload.method,
+        active: payload.active,
+        code_length: code.length,
+        payload: JSON.stringify(payload, null, 2)
+      });
+
+      const response = await this.client.post('/restapi/be-scripts/script-by-internal-name', payload);
+      
+      this.serviceLogger.info('Successfully pushed backend script', {
+        name: payload.name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push backend script', {
+        name: metadata.name,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+      
+      if (error.response) {
+        const errorMsg = error.response.data?.message 
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push backend script ${metadata.name}: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
 }
 
 /**
