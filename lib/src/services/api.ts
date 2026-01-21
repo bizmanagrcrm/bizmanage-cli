@@ -490,12 +490,12 @@ export class ApiService {
           // Extract metadata (excluding id and content)
           const metadata: PageMetadata = {
             name: apiPage.name,
+            url: apiPage.url || '',
             version: apiPage.version,
             publihsed: apiPage.publihsed,
             data: apiPage.data,
             access_policy: apiPage.access_policy,
             render_type: apiPage.render_type,
-            url: apiPage.url,
             max_version: apiPage.max_version
           };
 
@@ -861,6 +861,63 @@ export class ApiService {
           || JSON.stringify(error.response.data)
           || error.response.statusText;
         throw new Error(`Failed to push backend script ${metadata.name}: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Push page to the platform
+   * POST /restapi/custom-pages/by-url
+   */
+  async pushPage(metadata: PageMetadata, content: string): Promise<any> {
+    try {
+      await this.applyDelay();
+      
+      // Remove id from metadata if present
+      const { id, ...metadataWithoutId } = metadata as any;
+      
+      // Build payload with url, name, content, and default publihsed to true
+      const payload = {
+        url: metadataWithoutId.url,
+        name: metadataWithoutId.name,
+        content: content,
+        publihsed: metadataWithoutId.publihsed !== undefined ? metadataWithoutId.publihsed : true
+      };
+      
+      this.serviceLogger.debug('Pushing page', { 
+        url: payload.url,
+        name: payload.name,
+        publihsed: payload.publihsed,
+        content_length: content.length,
+        payload: JSON.stringify({ ...payload, content: `${content.substring(0, 100)}...` }, null, 2)
+      });
+
+      const response = await this.client.post('/restapi/custom-pages/by-url', payload);
+      
+      this.serviceLogger.info('Successfully pushed page', {
+        url: payload.url,
+        name: payload.name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push page', {
+        url: metadata.url,
+        name: metadata.name,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+      
+      if (error.response) {
+        const errorMsg = error.response.data?.message 
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push page ${metadata.name}: ${errorMsg}`);
       }
       throw error;
     }

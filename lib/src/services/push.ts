@@ -432,18 +432,61 @@ export class PushService {
    * Push page (HTML + metadata)
    */
   private async pushPage(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/pages or PUT /api/pages/{id}
     this.serviceLogger.info('Pushing page', { path: file.relativePath });
     
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // await this.apiService.client.post('/api/pages', {
-    //   html: file.content,
-    //   metadata: file.metadata
-    // });
+    try {
+      let metadata: any;
+      let content: string;
+      
+      // Determine if this is a .json metadata file or .html content file
+      if (file.filePath.endsWith('.json')) {
+        // This is the metadata file
+        metadata = JSON.parse(file.content);
+        
+        // Check for corresponding .html file
+        const contentPath = file.filePath.replace('.json', '.html');
+        if (await fs.pathExists(contentPath)) {
+          content = await fs.readFile(contentPath, 'utf8');
+          this.serviceLogger.debug('Found corresponding HTML file', { contentPath });
+        } else {
+          throw new Error(`HTML file not found for page: ${contentPath}`);
+        }
+      } else if (file.filePath.endsWith('.html')) {
+        // This is an HTML file, load corresponding metadata
+        const metadataPath = file.filePath.replace('.html', '.json');
+        if (await fs.pathExists(metadataPath)) {
+          metadata = await fs.readJSON(metadataPath);
+          content = file.content;
+        } else {
+          throw new Error(`Metadata file not found for page HTML: ${metadataPath}`);
+        }
+      } else {
+        throw new Error(`Unsupported page file type: ${file.filePath}`);
+      }
+      
+      // Validate required fields
+      if (!metadata.url) {
+        throw new Error('Page metadata missing required field: url');
+      }
+      if (!metadata.name) {
+        throw new Error('Page metadata missing required field: name');
+      }
+      
+      // Push the page using the ApiService method
+      await this.apiService.pushPage(metadata, content);
+      
+      this.serviceLogger.debug('Successfully pushed page', { 
+        url: metadata.url,
+        name: metadata.name,
+        content_length: content.length
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push page', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**
