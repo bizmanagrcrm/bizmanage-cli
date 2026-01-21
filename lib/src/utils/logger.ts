@@ -21,7 +21,7 @@ export interface LoggerConfig {
 }
 
 // Custom formatter for CLI output
-const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp, ...meta }) => {
+const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp, metadata, ...meta }) => {
   let formatted = '';
   
   // Add timestamp if enabled
@@ -59,9 +59,14 @@ const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp,
   
   formatted += `${levelLabel} ${message}`;
   
-  // Add metadata if present
-  if (Object.keys(meta).length > 0) {
-    formatted += `\n${JSON.stringify(meta, null, 2)}`;
+  // Add metadata if present (excluding internal Winston/logger metadata)
+  // Only show user-provided metadata, not internal metadata like prefix/timestamp
+  const userMeta = { ...meta };
+  delete userMeta.prefix;
+  delete userMeta.timestamp;
+  
+  if (Object.keys(userMeta).length > 0) {
+    formatted += `\n${JSON.stringify(userMeta, null, 2)}`;
   }
   
   return formatted;

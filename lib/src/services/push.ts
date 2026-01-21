@@ -199,7 +199,7 @@ export class PushService {
    * Push object definition to /restapi/customization/view-by-internal-name
    */
   private async pushObject(file: CustomizationFile): Promise<void> {
-    this.serviceLogger.info('Pushing object definition', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing object definition', { path: file.relativePath });
     
     try {
       // Parse the definition file (raw API format)
@@ -231,7 +231,7 @@ export class PushService {
    * Push action (metadata + optional code) to /restapi/customization/action
    */
   private async pushAction(file: CustomizationFile): Promise<void> {
-    this.serviceLogger.info('Pushing action', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing action', { path: file.relativePath });
     
     try {
       let metadata: any;
@@ -313,7 +313,7 @@ export class PushService {
    * Push field definition to /restapi/customization/field-by-internal-name
    */
   private async pushField(file: CustomizationFile): Promise<void> {
-    this.serviceLogger.info('Pushing field', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing field', { path: file.relativePath });
     
     try {
       // Parse the field JSON file
@@ -355,7 +355,7 @@ export class PushService {
    * Push backend script (code + metadata)
    */
   private async pushBackendScript(file: CustomizationFile): Promise<void> {
-    this.serviceLogger.info('Pushing backend script', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing backend script', { path: file.relativePath });
     
     try {
       let metadata: any;
@@ -416,7 +416,7 @@ export class PushService {
   private async pushReport(file: CustomizationFile): Promise<void> {
     // TODO: Implement actual API call
     // Example: POST /api/reports or PUT /api/reports/{id}
-    this.serviceLogger.info('Pushing report', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing report', { path: file.relativePath });
     
     // Mock API call
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -432,7 +432,7 @@ export class PushService {
    * Push page (HTML + metadata)
    */
   private async pushPage(file: CustomizationFile): Promise<void> {
-    this.serviceLogger.info('Pushing page', { path: file.relativePath });
+    this.serviceLogger.debug('Pushing report', { path: file.relativePath });
     
     try {
       let metadata: any;
@@ -504,11 +504,11 @@ export class PushService {
       const changedFiles = await this.getChangedFiles(projectPath);
 
       if (changedFiles.length === 0) {
-        this.serviceLogger.info('No changed files to push');
+        this.serviceLogger.debug('No changed files to push');
         return result;
       }
 
-      this.serviceLogger.info('Pushing changed files', { count: changedFiles.length });
+      this.serviceLogger.debug('Pushing changed files', { count: changedFiles.length });
 
       // Push each file
       for (const file of changedFiles) {
@@ -600,7 +600,7 @@ export class PushService {
 
     await scanDir(srcPath);
 
-    this.serviceLogger.info('Pushing all files', { count: allFiles.length });
+    this.serviceLogger.debug('Pushing all files', { count: allFiles.length });
 
     // Initialize hash cache
     await this.hashCache.initialize(projectPath);

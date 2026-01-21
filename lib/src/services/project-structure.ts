@@ -89,7 +89,7 @@ export class ProjectStructureService {
       { spaces: 2 }
     );
 
-    this.serviceLogger.info('Project initialized successfully', { projectPath });
+    this.serviceLogger.debug('Project initialized successfully', { projectPath });
   }
 
   /**
@@ -293,7 +293,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Objects written successfully`, { count: objects.length });
+      this.serviceLogger.debug(`Objects written successfully`, { count: objects.length });
     } catch (error) {
       result.success = false;
       result.errors.push(`Failed to write objects: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -372,7 +372,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Objects written successfully`, { count: objects.length });
+      this.serviceLogger.debug(`Objects written successfully`, { count: objects.length });
     } catch (error) {
       result.success = false;
       result.errors.push(`Failed to write objects: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -423,7 +423,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Backend scripts written successfully`, { count: scripts.length });
+      this.serviceLogger.debug(`Backend scripts written successfully`, { count: scripts.length });
     } catch (error) {
       result.success = false;
       result.errors.push(`Failed to write backend scripts: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -474,7 +474,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Reports written successfully`, { count: reports.length });
+      this.serviceLogger.debug(`Reports written successfully`, { count: reports.length });
     } catch (error) {
       result.success = false;
       result.errors.push(`Failed to write reports: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -542,7 +542,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Pages written successfully`, { count: pages.length, itemCount: result.itemCount, warnings: result.warnings.length });
+      this.serviceLogger.debug(`Pages written successfully`, { count: pages.length, itemCount: result.itemCount, warnings: result.warnings.length });
     } catch (error) {
       result.success = false;
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -595,7 +595,7 @@ export class ProjectStructureService {
       }
 
       await this.hashCache.save();
-      this.serviceLogger.info(`Scripts written successfully`, { count: scripts.length });
+      this.serviceLogger.debug(`Scripts written successfully`, { count: scripts.length });
     } catch (error) {
       result.success = false;
       result.errors.push(`Failed to write scripts: ${error instanceof Error ? error.message : 'Unknown error'}`);

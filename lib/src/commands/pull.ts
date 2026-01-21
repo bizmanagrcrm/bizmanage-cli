@@ -17,7 +17,6 @@ export const pullCommand = new Command()
   .action(async (options: { alias: string; output: string; init?: boolean; delay: string }) => {
     const serviceLogger = logger.child('PullCommand');
     serviceLogger.info(chalk.blue('⬇️  Pulling customizations from Bizmanage platform'));
-    serviceLogger.info('');
 
     try {
       const projectPath = path.resolve(options.output);
@@ -30,10 +29,9 @@ export const pullCommand = new Command()
         process.exit(1);
       }
 
-      serviceLogger.info(chalk.dim(`Using configuration: ${options.alias}`));
-      serviceLogger.info(chalk.dim(`Instance: ${config.instanceUrl}`));
-      serviceLogger.info(chalk.dim(`Output directory: ${path.resolve(options.output)}`));
-      serviceLogger.info('');
+      serviceLogger.debug(`Using configuration: ${options.alias}`);
+      serviceLogger.debug(`Instance: ${config.instanceUrl}`);
+      serviceLogger.debug(`Output directory: ${path.resolve(options.output)}`);
 
       // Test connection first
       const bizmanageService = new BizmanageService(config);
@@ -44,8 +42,7 @@ export const pullCommand = new Command()
         process.exit(1);
       }
 
-      serviceLogger.info(chalk.green(`✅ Connected successfully (${connectionTest.responseTime}ms)`));
-      serviceLogger.info('');
+      serviceLogger.debug(`Connected successfully (${connectionTest.responseTime}ms)`);
 
       const delayMs = parseInt(options.delay, 10);
       if (isNaN(delayMs) || delayMs < 0) {
@@ -54,8 +51,7 @@ export const pullCommand = new Command()
       }
 
       if (delayMs > 0) {
-        serviceLogger.info(chalk.dim(`Rate limiting enabled: ${delayMs}ms delay between requests`));
-        serviceLogger.info('');
+        serviceLogger.debug(`Rate limiting enabled: ${delayMs}ms delay between requests`);
       }
 
       const apiService = new ApiService(config, delayMs);
@@ -106,38 +102,38 @@ export const pullCommand = new Command()
         tablesSpinner.succeed(`${chalk.green('✓')} Tables: Found ${results.tables} tables`);
         
         if (tables.length === 0) {
-          serviceLogger.warn(chalk.yellow('⚠️  No tables found. This might indicate:'));
-          serviceLogger.info(chalk.dim('   • No custom tables are configured'));
-          serviceLogger.info(chalk.dim('   • API permissions might not include table access'));
-          serviceLogger.info(chalk.dim('   • The endpoint might not be available on your instance'));
+          serviceLogger.warn(chalk.yellow('⚠️  No tables found'));
+          serviceLogger.debug('This might indicate:');
+          serviceLogger.debug('   • No custom tables are configured');
+          serviceLogger.debug('   • API permissions might not include table access');
+          serviceLogger.debug('   • The endpoint might not be available on your instance');
         }
       } catch (error) {
         tablesSpinner.fail(`${chalk.red('✗')} Failed to fetch tables`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         
         // Provide helpful error guidance for table fetching
-        serviceLogger.info('');
         if (errorMessage.includes('403') || errorMessage.includes('401')) {
-          serviceLogger.warn(chalk.yellow('💡 Authentication issue detected. Please check:'));
-          serviceLogger.info(chalk.dim('   • API key is valid and not expired'));
-          serviceLogger.info(chalk.dim('   • Instance URL is correct'));
-          serviceLogger.info(chalk.dim('   • API key has required permissions'));
+          serviceLogger.warn(chalk.yellow('💡 Authentication issue detected'));
+          serviceLogger.debug('Please check:');
+          serviceLogger.debug('   • API key is valid and not expired');
+          serviceLogger.debug('   • Instance URL is correct');
+          serviceLogger.debug('   • API key has required permissions');
         } else if (errorMessage.includes('404')) {
-          serviceLogger.warn(chalk.yellow('💡 Endpoint not found. This might indicate:'));
-          serviceLogger.info(chalk.dim('   • The API endpoint URL has changed'));
-          serviceLogger.info(chalk.dim('   • Your instance might not support custom tables'));
+          serviceLogger.warn(chalk.yellow('💡 Endpoint not found'));
+          serviceLogger.debug('This might indicate:');
+          serviceLogger.debug('   • The API endpoint URL has changed');
+          serviceLogger.debug('   • Your instance might not support custom tables');
         } else if (errorMessage.includes('timeout')) {
-          serviceLogger.warn(chalk.yellow('💡 Request timed out. Consider:'));
-          serviceLogger.info(chalk.dim('   • Checking your internet connection'));
-          serviceLogger.info(chalk.dim('   • Trying again in a moment'));
+          serviceLogger.warn(chalk.yellow('💡 Request timed out'));
+          serviceLogger.debug('Consider:');
+          serviceLogger.debug('   • Checking your internet connection');
+          serviceLogger.debug('   • Trying again in a moment');
         }
         
-        serviceLogger.info('');
         serviceLogger.error(chalk.red(`❌ Pull failed during table fetching: ${errorMessage}`));
         process.exit(1);
       }
-
-      serviceLogger.info(''); // Add spacing after tables section
 
       // Step 2: Fetch full table definitions and process them
       const objectsSpinner = ora('Fetching full table definitions...').start();
@@ -182,7 +178,6 @@ export const pullCommand = new Command()
             objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
           } else {
             objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
-            serviceLogger.info('');
             serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
             process.exit(1);
           }
@@ -190,7 +185,6 @@ export const pullCommand = new Command()
       } catch (error) {
         objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.info('');
         serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
         process.exit(1);
       }
@@ -226,7 +220,6 @@ export const pullCommand = new Command()
         } catch (error) {
           fieldsSpinner.fail(`${chalk.red('✗')} Failed to process fields`);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          serviceLogger.info('');
           serviceLogger.error(chalk.red(`❌ Pull failed during fields processing: ${errorMessage}`));
           process.exit(1);
         }
@@ -263,7 +256,6 @@ export const pullCommand = new Command()
         } catch (error) {
           actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          serviceLogger.info('');
           serviceLogger.error(chalk.red(`❌ Pull failed during actions processing: ${errorMessage}`));
           process.exit(1);
         }
@@ -282,14 +274,12 @@ export const pullCommand = new Command()
           reportsSpinner.succeed(`${chalk.green('✓')} Reports: ${results.reports} items processed`);
         } else {
           reportsSpinner.fail(`${chalk.red('✗')} Reports: ${reportResult.errors.join(', ')}`);
-          serviceLogger.info('');
           serviceLogger.error(chalk.red(`❌ Pull failed during reports processing: ${reportResult.errors.join(', ')}`));
           process.exit(1);
         }
       } catch (error) {
         reportsSpinner.fail(`${chalk.red('✗')} Failed to fetch reports`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.info('');
         serviceLogger.error(chalk.red(`❌ Pull failed during reports fetching: ${errorMessage}`));
         process.exit(1);
       }
@@ -307,14 +297,12 @@ export const pullCommand = new Command()
           pagesSpinner.succeed(`${chalk.green('✓')} Pages: ${results.pages} items processed`);
         } else {
           pagesSpinner.fail(`${chalk.red('✗')} Pages: ${pageResult.errors.join(', ')}`);
-          serviceLogger.info('');
           serviceLogger.error(chalk.red(`❌ Pull failed during pages processing: ${pageResult.errors.join(', ')}`));
           process.exit(1);
         }
       } catch (error) {
         pagesSpinner.fail(`${chalk.red('✗')} Failed to fetch pages`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.info('');
         serviceLogger.error(chalk.red(`❌ Pull failed during pages fetching: ${errorMessage}`));
         process.exit(1);
       }
@@ -332,14 +320,12 @@ export const pullCommand = new Command()
           backendScriptsSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
         } else {
           backendScriptsSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
-          serviceLogger.info('');
           serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
           process.exit(1);
         }
       } catch (error) {
         backendScriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.info('');
         serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
         process.exit(1);
       }
@@ -359,25 +345,15 @@ export const pullCommand = new Command()
         serviceLogger.warn(chalk.yellow('⚠️  Failed to update project config timestamp'));
       }
 
-      serviceLogger.info('');
-      
       // If we reach this point, everything succeeded
+      serviceLogger.info('');
       serviceLogger.info(chalk.green('🎉 Pull completed successfully!'));
       
       const totalItems = results.objects + results.backendScripts + results.reports + results.pages + totalFields + totalActions;
-      serviceLogger.info(chalk.dim(`Total items: ${totalItems}`));
-      serviceLogger.info(chalk.dim(`  • Tables Found: ${results.tables}`));
-      serviceLogger.info(chalk.dim(`  • Objects Processed: ${results.objects}`));
-      serviceLogger.info(chalk.dim(`  • Fields Processed: ${totalFields}`));
-      serviceLogger.info(chalk.dim(`  • Actions Processed: ${totalActions}`));
-      serviceLogger.info(chalk.dim(`  • Backend Scripts: ${results.backendScripts}`));
-      serviceLogger.info(chalk.dim(`  • Reports: ${results.reports}`));
-      serviceLogger.info(chalk.dim(`  • Pages: ${results.pages}`));
-      serviceLogger.info('');
-      serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`));
+      serviceLogger.info(chalk.dim(`Total: ${totalItems} items (${results.tables} tables, ${results.objects} objects, ${totalFields} fields, ${totalActions} actions, ${results.backendScripts} scripts, ${results.reports} reports, ${results.pages} pages)`));
+      serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`))
 
     } catch (error) {
-      serviceLogger.info('');
       serviceLogger.error(chalk.red(`❌ Pull failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
       process.exit(1);
     }

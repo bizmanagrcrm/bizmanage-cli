@@ -455,7 +455,7 @@ export class ApiService {
           };
         });
 
-      this.serviceLogger.info(`Fetched ${reports.length} reports from API`);
+      this.serviceLogger.debug(`Fetched ${reports.length} reports from API`);
       return reports;
     } catch (error) {
       this.serviceLogger.error('Failed to fetch reports', { 
@@ -468,13 +468,13 @@ export class ApiService {
 
   /**
    * Fetch custom pages from the platform
-   * Endpoint: GET /restapi/admin/custom-pages?latest_only=true
+   * Endpoint: GET /restapi/admin/custom-pages/all
    */
   async fetchPages(): Promise<BizmanagePage[]> {
     await this.applyDelay();
     
     try {
-      const response = await this.client.get<BizmanagePageResponse[]>('/restapi/admin/custom-pages?latest_only=true');
+      const response = await this.client.get<BizmanagePageResponse[]>('/restapi/admin/custom-pages/all');
       
       // Transform API response to our internal format
       const pages: BizmanagePage[] = response.data
@@ -506,7 +506,7 @@ export class ApiService {
           };
         });
 
-      this.serviceLogger.info(`Fetched ${pages.length} pages from API`);
+      this.serviceLogger.debug(`Fetched ${pages.length} pages from API`);
       return pages;
     } catch (error) {
       this.serviceLogger.error('Failed to fetch pages', { 
@@ -554,7 +554,7 @@ export class ApiService {
         };
       });
 
-      this.serviceLogger.info(`Fetched ${scripts.length} scripts from API`);
+      this.serviceLogger.debug(`Fetched ${scripts.length} scripts from API`);
       return scripts;
     } catch (error) {
       this.serviceLogger.error('Failed to fetch scripts', { 
@@ -672,7 +672,7 @@ export class ApiService {
 
       const response = await this.client.post('/restapi/customization/view-by-internal-name', definition);
       
-      this.serviceLogger.info('Successfully pushed object definition', {
+      this.serviceLogger.debug('Successfully pushed object definition', {
         internal_name: definition.internal_name,
         status: response.status
       });
@@ -722,7 +722,7 @@ export class ApiService {
 
       const response = await this.client.post('/restapi/customization/field-by-internal-name', payload);
       
-      this.serviceLogger.info('Successfully pushed field definition', {
+      this.serviceLogger.debug('Successfully pushed field definition', {
         table: tableName,
         internal_name: field.internal_name || field.name,
         status: response.status
@@ -778,7 +778,7 @@ export class ApiService {
 
       const response = await this.client.post('/restapi/customization/action', payload);
       
-      this.serviceLogger.info('Successfully pushed action definition', {
+      this.serviceLogger.debug('Successfully pushed action definition', {
         table_name: metadata.table_name,
         action_name: metadata.action_name,
         status: response.status
@@ -840,7 +840,7 @@ export class ApiService {
 
       const response = await this.client.post('/restapi/be-scripts/script-by-internal-name', payload);
       
-      this.serviceLogger.info('Successfully pushed backend script', {
+      this.serviceLogger.debug('Successfully pushed backend script', {
         name: payload.name,
         status: response.status
       });
@@ -895,7 +895,7 @@ export class ApiService {
 
       const response = await this.client.post('/restapi/custom-pages/by-url', payload);
       
-      this.serviceLogger.info('Successfully pushed page', {
+      this.serviceLogger.debug('Successfully pushed page', {
         url: payload.url,
         name: payload.name,
         status: response.status

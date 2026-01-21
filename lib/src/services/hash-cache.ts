@@ -161,7 +161,7 @@ export class HashCacheService {
   async clear(): Promise<void> {
     this.cache = { version: '1.0.0', hashes: {} };
     await this.save();
-    this.serviceLogger.info('Cleared hash cache');
+    this.serviceLogger.debug('Cleared hash cache');
   }
 
   /**
