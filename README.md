@@ -371,6 +371,7 @@ bizmanage pull [options]
 - `-o, --output <path>` - Output directory (default: "./src")
 - `-d, --delay <ms>` - Delay in milliseconds between API requests (default: 0)
 - `--init` - Initialize a new project structure
+- `-f, --force` - Force pull even when local changes exist (overwrites local files)
 
 **Example:**
 ```bash
@@ -388,7 +389,12 @@ bizmanage pull --delay 100
 
 # Pull with slower rate limiting for heavily rate-limited instances
 bizmanage pull --delay 500
+
+# Pull and overwrite local changes (use only after committing/pushing your work)
+bizmanage pull -f
 ```
+
+> Pull safety: If local changes are detected, the pull is blocked to avoid overwriting your work. Commit and push your changes first, or rerun with `-f` to forcefully overwrite local files (the CLI clears its hash cache in force mode so every pulled file is rewritten).
 
 ### `bizmanage push`
 

@@ -7,6 +7,7 @@ import { ApiService, BizmanageTableResponse } from '../services/api.js';
 import { ProjectStructureService } from '../services/project-structure.js';
 import { BizmanageService } from '../services/bizmanage.js';
 import { logger } from '../utils/logger.js';
+import { HashCacheService } from '../services/hash-cache.js';
 export const pullCommand = new Command()
   .name('pull')
   .description('Pull customizations from Bizmanage platform to local filesystem')
@@ -14,7 +15,8 @@ export const pullCommand = new Command()
   .option('-o, --output <path>', 'Output directory (default: current directory)', '.')
   .option('--init', 'Initialize a new project structure')
   .option('-d, --delay <ms>', 'Delay in milliseconds between API requests (default: 0 for fast pulls)', '0')
-  .action(async (options: { alias: string; output: string; init?: boolean; delay: string }) => {
+  .option('-f, --force', 'Force pull even if local changes are detected (overwrites local files)')
+  .action(async (options: { alias: string; output: string; init?: boolean; delay: string; force?: boolean }) => {
     const serviceLogger = logger.child('PullCommand');
     serviceLogger.info(chalk.blue('⬇️  Pulling customizations from Bizmanage platform'));
 
@@ -80,6 +82,31 @@ export const pullCommand = new Command()
             spinner.fail(chalk.red('✗ Failed to initialize project'));
             throw error;
           }
+        }
+      }
+
+      // Prevent overwriting local changes unless --force is provided
+      const hashCache = new HashCacheService();
+      if (isExistingProject && !options.init) {
+        await hashCache.initialize(projectPath);
+
+        if (!options.force) {
+          const changes = await hashCache.getChanges(projectPath);
+          const hasChanges = changes.total.changed > 0 || changes.total.new > 0 || changes.total.deleted > 0;
+
+          if (hasChanges) {
+            serviceLogger.warn(chalk.yellow('⚠️  Local changes detected - pull aborted to avoid overwriting'));
+            console.log(chalk.red('❌ Pull blocked. Local changes exist.'));
+            console.log(chalk.yellow('Run "bizmanage status" to review pending changes.'));
+            console.log(chalk.yellow('Commit and push your work to git first, then rerun with -f to overwrite local files:'));
+            console.log(chalk.blue('  bizmanage pull -f'));
+            console.log(chalk.dim('Note: Using -f will override local changes with data from the platform.'));
+            process.exit(1);
+          }
+        } else {
+          // Force mode: clear cache so all pulled files overwrite local copies and hashes refresh
+          await hashCache.clear();
+          serviceLogger.warn(chalk.yellow('⚠️  Force pull enabled - local files will be overwritten'));
         }
       }
 
