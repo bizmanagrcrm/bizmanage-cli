@@ -867,6 +867,59 @@ export class ApiService {
   }
 
   /**
+   * Push report to the platform
+   * POST /restapi/c-reports//by-name
+   */
+  async pushReport(metadata: ReportMetadata, sql: string): Promise<any> {
+    try {
+      await this.applyDelay();
+
+      // Remove id from metadata if present
+      const { id, ...metadataWithoutId } = metadata as any;
+
+      const payload = {
+        ...metadataWithoutId,
+        query: sql,
+        params: metadataWithoutId.params ?? [],
+        to_users: metadataWithoutId.to_users ?? []
+      };
+
+      this.serviceLogger.debug('Pushing report', {
+        internal_name: payload.internal_name,
+        display_name: payload.display_name,
+        report_type: payload.report_type,
+        payload: JSON.stringify({ ...payload, query: `${sql.substring(0, 100)}...` }, null, 2)
+      });
+
+      const response = await this.client.post('/restapi/c-reports//by-name', payload);
+
+      this.serviceLogger.debug('Successfully pushed report', {
+        internal_name: payload.internal_name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push report', {
+        internal_name: metadata.internal_name,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+
+      if (error.response) {
+        const errorMsg = error.response.data?.message
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push report ${metadata.internal_name}: ${errorMsg}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Push page to the platform
    * POST /restapi/custom-pages/by-url
    */

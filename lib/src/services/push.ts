@@ -414,18 +414,59 @@ export class PushService {
    * Push report (SQL + metadata)
    */
   private async pushReport(file: CustomizationFile): Promise<void> {
-    // TODO: Implement actual API call
-    // Example: POST /api/reports or PUT /api/reports/{id}
     this.serviceLogger.debug('Pushing report', { path: file.relativePath });
-    
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // In real implementation:
-    // await this.apiService.client.post('/api/reports', {
-    //   sql: file.content,
-    //   metadata: file.metadata
-    // });
+
+    try {
+      let metadata: any;
+      let sql: string;
+
+      if (file.filePath.endsWith('.json')) {
+        metadata = JSON.parse(file.content);
+        const sqlPath = file.filePath.replace('.json', '.sql');
+
+        if (await fs.pathExists(sqlPath)) {
+          sql = await fs.readFile(sqlPath, 'utf8');
+        } else {
+          throw new Error(`SQL file not found for report: ${sqlPath}`);
+        }
+      } else if (file.filePath.endsWith('.sql')) {
+        sql = file.content;
+        const metadataPath = file.filePath.replace('.sql', '.json');
+
+        if (await fs.pathExists(metadataPath)) {
+          metadata = await fs.readJSON(metadataPath);
+        } else {
+          throw new Error(`Metadata file not found for report SQL: ${metadataPath}`);
+        }
+      } else {
+        throw new Error(`Unsupported report file type: ${file.filePath}`);
+      }
+
+      if (!metadata.internal_name) {
+        throw new Error('Report metadata missing required field: internal_name');
+      }
+
+      if (!metadata.display_name) {
+        throw new Error('Report metadata missing required field: display_name');
+      }
+
+      if (!metadata.report_type) {
+        throw new Error('Report metadata missing required field: report_type');
+      }
+
+      await this.apiService.pushReport(metadata, sql);
+
+      this.serviceLogger.debug('Successfully pushed report', {
+        internal_name: metadata.internal_name,
+        display_name: metadata.display_name
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push report', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 
   /**
