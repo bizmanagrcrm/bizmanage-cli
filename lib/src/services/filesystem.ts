@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
 import { Customization } from './api.js';
+import { normalizeLocalName } from '../utils/local-name.js';
 
 export class FileSystemService {
   
@@ -97,11 +98,7 @@ export class FileSystemService {
    * Get appropriate file extension based on customization type
    */
   private getCodeFileName(customization: Customization): string {
-    const sanitizedName = customization.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
+    const sanitizedName = normalizeLocalName(customization.name);
 
     switch (customization.type) {
       case 'backend-script':

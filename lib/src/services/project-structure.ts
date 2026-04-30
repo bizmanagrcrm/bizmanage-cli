@@ -17,6 +17,7 @@ import {
   validatePageMetadata,
   validateScriptMetadata
 } from '../schemas/project-structure.js';
+import { normalizeLocalName } from '../utils/local-name.js';
 import { logger } from '../utils/logger.js';
 import { HashCacheService } from './hash-cache.js';
 
@@ -881,11 +882,8 @@ export class ProjectStructureService {
       this.serviceLogger.warn('sanitizeName called with empty name, using fallback');
       return 'unnamed';
     }
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
+
+    return normalizeLocalName(name);
   }
 
   private getActionFileExtension(type: string): string {
