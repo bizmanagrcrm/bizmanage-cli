@@ -212,7 +212,7 @@ export class PushService {
       }
       
       // Push the definition as-is (it's already in the API format)
-      await this.apiService.pushObjectDefinition(definition);
+      await this.apiService.pushObjectDefinition(definition, file.relativePath);
       
       this.serviceLogger.debug('Successfully pushed object definition', { 
         internal_name: definition.internal_name,
@@ -293,7 +293,7 @@ export class PushService {
       }
       
       // Push the action using the ApiService method (passing metadata only now)
-      await this.apiService.pushActionDefinition(metadata, code);
+      await this.apiService.pushActionDefinition(metadata, code, file.relativePath);
       
       this.serviceLogger.debug('Successfully pushed action', { 
         table_name: metadata.table_name,
@@ -335,7 +335,7 @@ export class PushService {
       }
       
       // Push the field using the ApiService method
-      await this.apiService.pushFieldDefinition(tableName, fieldData);
+      await this.apiService.pushFieldDefinition(tableName, fieldData, file.relativePath);
       
       this.serviceLogger.debug('Successfully pushed field', { 
         table: tableName,
@@ -393,7 +393,7 @@ export class PushService {
       }
       
       // Push the backend script using the ApiService method
-      await this.apiService.pushBackendScript(metadata, code);
+      await this.apiService.pushBackendScript(metadata, code, file.relativePath);
       
       this.serviceLogger.debug('Successfully pushed backend script', { 
         name: metadata.name,
@@ -454,7 +454,7 @@ export class PushService {
         throw new Error('Report metadata missing required field: report_type');
       }
 
-      await this.apiService.pushReport(metadata, sql);
+      await this.apiService.pushReport(metadata, sql, file.relativePath);
 
       this.serviceLogger.debug('Successfully pushed report', {
         internal_name: metadata.internal_name,
@@ -514,7 +514,7 @@ export class PushService {
       }
       
       // Push the page using the ApiService method
-      await this.apiService.pushPage(metadata, content);
+      await this.apiService.pushPage(metadata, content, file.relativePath);
       
       this.serviceLogger.debug('Successfully pushed page', { 
         url: metadata.url,

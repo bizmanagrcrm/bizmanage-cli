@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import chalk from 'chalk';
 import { AuthConfig } from './auth.js';
 import { 
@@ -216,6 +216,10 @@ export class ApiService {
   private delayMs: number;
   private lastRequestTime: number = 0;
 
+  private createRequestConfig(sourceFilePath?: string): AxiosRequestConfig {
+    return sourceFilePath ? { metadata: { sourceFilePath } } as AxiosRequestConfig : {};
+  }
+
   constructor(config: AuthConfig, delayMs: number = 0) {
     this.config = config;
     this.delayMs = delayMs;
@@ -236,7 +240,8 @@ export class ApiService {
           requestConfig.method || 'GET',
           this.formatRequestUrl(requestConfig),
           requestConfig.headers,
-          requestConfig.data
+          requestConfig.data,
+          this.getSourceFilePath(requestConfig)
         );
 
         return requestConfig;
@@ -255,7 +260,8 @@ export class ApiService {
           response.status,
           this.formatRequestUrl(response.config),
           response.data,
-          responseTime
+          responseTime,
+          this.getSourceFilePath(response.config)
         );
 
         return response;
@@ -274,7 +280,8 @@ export class ApiService {
             : error.message,
           error.response?.status,
           error.response?.data,
-          responseTime
+          responseTime,
+          requestConfig ? this.getSourceFilePath(requestConfig) : undefined
         );
 
         return Promise.reject(error);
@@ -288,6 +295,10 @@ export class ApiService {
 
   private getResponseTime(requestConfig: InternalAxiosRequestConfig & { requestStartTime?: number }): number | undefined {
     return requestConfig.requestStartTime ? Date.now() - requestConfig.requestStartTime : undefined;
+  }
+
+  private getSourceFilePath(requestConfig: InternalAxiosRequestConfig & { metadata?: { sourceFilePath?: string } }): string | undefined {
+    return requestConfig.metadata?.sourceFilePath;
   }
 
   /**
@@ -721,7 +732,7 @@ export class ApiService {
    * Push object/table definition to the platform
    * POST /restapi/customization/view
    */
-  async pushObjectDefinition(definition: any): Promise<any> {
+  async pushObjectDefinition(definition: any, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
       
@@ -731,7 +742,7 @@ export class ApiService {
         payload: JSON.stringify(definition, null, 2)
       });
 
-      const response = await this.client.post('/restapi/customization/view-by-internal-name', definition);
+      const response = await this.client.post('/restapi/customization/view-by-internal-name', definition, this.createRequestConfig(sourceFilePath));
       
       this.serviceLogger.debug('Successfully pushed object definition', {
         internal_name: definition.internal_name,
@@ -741,6 +752,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push object definition', {
+        filePath: sourceFilePath,
         internal_name: definition.internal_name,
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -763,7 +775,7 @@ export class ApiService {
    * Push field definition to the platform
    * POST /restapi/customization/field-by-internal-name
    */
-  async pushFieldDefinition(tableName: string, field: BizmanageField): Promise<any> {
+  async pushFieldDefinition(tableName: string, field: BizmanageField, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
       
@@ -781,7 +793,7 @@ export class ApiService {
         payload: JSON.stringify(payload, null, 2)
       });
 
-      const response = await this.client.post('/restapi/customization/field-by-internal-name', payload);
+      const response = await this.client.post('/restapi/customization/field-by-internal-name', payload, this.createRequestConfig(sourceFilePath));
       
       this.serviceLogger.debug('Successfully pushed field definition', {
         table: tableName,
@@ -792,6 +804,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push field definition', {
+        filePath: sourceFilePath,
         table: tableName,
         internal_name: field.internal_name || field.name,
         status: error.response?.status,
@@ -815,7 +828,7 @@ export class ApiService {
    * Push action definition to the platform
    * POST /restapi/customization/action
    */
-  async pushActionDefinition(metadata: ActionMetadata, code?: string): Promise<any> {
+  async pushActionDefinition(metadata: ActionMetadata, code?: string, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
       
@@ -837,7 +850,7 @@ export class ApiService {
         payload: JSON.stringify(payload, null, 2)
       });
 
-      const response = await this.client.post('/restapi/customization/action', payload);
+      const response = await this.client.post('/restapi/customization/action', payload, this.createRequestConfig(sourceFilePath));
       
       this.serviceLogger.debug('Successfully pushed action definition', {
         table_name: metadata.table_name,
@@ -848,6 +861,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push action definition', {
+        filePath: sourceFilePath,
         table_name: metadata.table_name,
         action_name: metadata.action_name,
         status: error.response?.status,
@@ -871,7 +885,7 @@ export class ApiService {
    * Push backend script to the platform
    * POST /restapi/be-scripts/script-by-internal-name
    */
-  async pushBackendScript(metadata: BackendScriptMetadata, code: string): Promise<any> {
+  async pushBackendScript(metadata: BackendScriptMetadata, code: string, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
       
@@ -899,7 +913,7 @@ export class ApiService {
         payload: JSON.stringify(payload, null, 2)
       });
 
-      const response = await this.client.post('/restapi/be-scripts/script-by-internal-name', payload);
+      const response = await this.client.post('/restapi/be-scripts/script-by-internal-name', payload, this.createRequestConfig(sourceFilePath));
       
       this.serviceLogger.debug('Successfully pushed backend script', {
         name: payload.name,
@@ -909,6 +923,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push backend script', {
+        filePath: sourceFilePath,
         name: metadata.name,
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -931,7 +946,7 @@ export class ApiService {
    * Push report to the platform
    * POST /restapi/c-reports//by-name
    */
-  async pushReport(metadata: ReportMetadata, sql: string): Promise<any> {
+  async pushReport(metadata: ReportMetadata, sql: string, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
 
@@ -952,7 +967,7 @@ export class ApiService {
         payload: JSON.stringify({ ...payload, query: `${sql.substring(0, 100)}...` }, null, 2)
       });
 
-      const response = await this.client.post('/restapi/c-reports//by-name', payload);
+      const response = await this.client.post('/restapi/c-reports//by-name', payload, this.createRequestConfig(sourceFilePath));
 
       this.serviceLogger.debug('Successfully pushed report', {
         internal_name: payload.internal_name,
@@ -962,6 +977,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push report', {
+        filePath: sourceFilePath,
         internal_name: metadata.internal_name,
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -984,7 +1000,7 @@ export class ApiService {
    * Push page to the platform
    * POST /restapi/custom-pages/by-url
    */
-  async pushPage(metadata: PageMetadata, content: string): Promise<any> {
+  async pushPage(metadata: PageMetadata, content: string, sourceFilePath?: string): Promise<any> {
     try {
       await this.applyDelay();
       
@@ -1007,7 +1023,7 @@ export class ApiService {
         payload: JSON.stringify({ ...payload, content: `${content.substring(0, 100)}...` }, null, 2)
       });
 
-      const response = await this.client.post('/restapi/custom-pages/by-url', payload);
+      const response = await this.client.post('/restapi/custom-pages/by-url', payload, this.createRequestConfig(sourceFilePath));
       
       this.serviceLogger.debug('Successfully pushed page', {
         url: payload.url,
@@ -1018,6 +1034,7 @@ export class ApiService {
       return response.data;
     } catch (error: any) {
       this.serviceLogger.error('Failed to push page', {
+        filePath: sourceFilePath,
         url: metadata.url,
         name: metadata.name,
         status: error.response?.status,

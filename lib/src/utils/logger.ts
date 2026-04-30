@@ -30,6 +30,26 @@ export interface LoggerConfig {
   silent?: boolean;
 }
 
+function extractPathMeta(meta: Record<string, unknown>): string | undefined {
+  const pathKeys = ['filePath', 'file', 'path'];
+
+  for (const key of pathKeys) {
+    const value = meta[key];
+    if (typeof value === 'string' && value.length) {
+      delete meta[key];
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function compactMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(meta).filter(([, value]) => value !== undefined)
+  );
+}
+
 // Custom formatter for CLI output
 const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp, metadata, ...meta }) => {
   let formatted = '';
@@ -70,13 +90,23 @@ const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp,
       levelLabel = level.toUpperCase();
   }
   
-  formatted += `${levelLabel} ${message}`;
-  
-  // Add metadata if present (excluding internal Winston/logger metadata)
-  // Only show user-provided metadata, not internal metadata like prefix/timestamp
-  const userMeta = { ...meta };
+  const metadataMeta = metadata && typeof metadata === 'object'
+    ? { ...(metadata as Record<string, unknown>) }
+    : {};
+
+  const userMeta = compactMeta({
+    ...metadataMeta,
+    ...meta
+  });
   delete userMeta.prefix;
   delete userMeta.timestamp;
+
+  const filePath = extractPathMeta(userMeta);
+
+  formatted += `${levelLabel} ${message}`;
+  if (filePath && (level === 'error' || level === 'wire')) {
+    formatted += ` (${filePath})`;
+  }
   
   if (Object.keys(userMeta).length > 0) {
     formatted += `\n${JSON.stringify(userMeta, null, 2)}`;
@@ -247,8 +277,9 @@ export class Logger {
   /**
    * Log HTTP request details (BizManage wire level)
    */
-  logRequest(method: string, url: string, headers?: any, data?: any): void {
+  logRequest(method: string, url: string, headers?: any, data?: any, filePath?: string): void {
     this.bizmanage(`HTTP ${method.toUpperCase()} ${url}`, {
+      filePath,
       headers: headers ? this.sanitizeHeaders(headers) : undefined,
       requestData: data || undefined
     });
@@ -257,19 +288,20 @@ export class Logger {
   /**
    * Log HTTP response details (BizManage wire level)
    */
-  logResponse(status: number, url: string, data?: any, responseTime?: number): void {
+  logResponse(status: number, url: string, data?: any, responseTime?: number, filePath?: string): void {
     const statusColor = status >= 400 ? chalk.red : status >= 300 ? chalk.yellow : chalk.green;
     const responseMsg = `HTTP ${statusColor(status)} ${url}${responseTime ? ` (${responseTime}ms)` : ''}`;
-    this.bizmanage(responseMsg, { responseData: data });
+    this.bizmanage(responseMsg, { filePath, responseData: data });
   }
 
   /**
    * Log BizManage HTTP error details
    */
-  logResponseError(method: string, url: string, errorMessage: string, status?: number, data?: any, responseTime?: number): void {
+  logResponseError(method: string, url: string, errorMessage: string, status?: number, data?: any, responseTime?: number, filePath?: string): void {
     const statusPart = status ? ` ${status}` : '';
     const timingPart = responseTime ? ` (${responseTime}ms)` : '';
     this.error(`HTTP ${method.toUpperCase()} ${url}${statusPart}${timingPart}: ${errorMessage}`, {
+      filePath,
       responseData: data
     });
   }

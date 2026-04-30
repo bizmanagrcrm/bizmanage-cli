@@ -141,8 +141,7 @@ export const validateCommand = new Command()
           for (const [type, errors] of Object.entries(errorsByType)) {
             console.log(chalk.bold(`  ${type} (${errors.length}):`));
             errors.slice(0, 10).forEach(error => {
-              const fileName = path.basename(error.file);
-              console.log(chalk.red(`    • ${fileName}: ${error.message}`));
+              console.log(chalk.red(`    • ${error.file}: ${error.message}`));
               if (error.path) {
                 console.log(chalk.dim(`      at ${error.path}`));
               }

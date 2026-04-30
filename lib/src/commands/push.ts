@@ -58,7 +58,7 @@ export const pushCommand = new Command()
         if (!validationResult.valid) {
           console.log(chalk.red('❌ Validation failed:'));
           validationResult.errors.forEach((error: any) => {
-            console.log(chalk.red(`  • ${path.basename(error.file)}: ${error.message}`));
+            console.log(chalk.red(`  • ${error.file}: ${error.message}`));
           });
           process.exit(1);
         }
@@ -92,10 +92,33 @@ export const pushCommand = new Command()
         const pushResult = pushingAll
           ? await pushService.pushAllFiles(projectPath)
           : await pushService.pushChangedFiles(projectPath);
-        
-        if (pushResult.pushedFiles.length === 0) {
+
+        if (!pushResult.success) {
+          pushSpinner.fail(chalk.red('Push completed with errors'));
+
+          if (pushResult.errors.length > 0) {
+            console.log();
+            console.log(chalk.red(`❌ ${pushResult.errors.length} error(s):`));
+            pushResult.errors.forEach(error => {
+              console.log(chalk.red(`  • ${error.file}: ${error.message}`));
+            });
+          }
+
+          if (pushResult.pushedFiles.length > 0) {
+            console.log();
+            console.log(chalk.yellow(`⚠️  ${pushResult.pushedFiles.length} file(s) pushed successfully before errors:`));
+            pushResult.pushedFiles.forEach(file => {
+              console.log(chalk.dim(`  • ${file}`));
+            });
+          }
+
+          process.exit(1);
+        } else if (pushResult.pushedFiles.length === 0) {
           pushSpinner.info(chalk.blue('No files to push - everything is up to date'));
-        } else if (pushResult.success) {
+          console.log();
+          console.log(chalk.dim(`No deployment was needed for ${config.instanceUrl}`));
+          return;
+        } else {
           pushSpinner.succeed(chalk.green(`Successfully pushed ${pushResult.pushedFiles.length} file(s)`));
           
           // Show list of pushed files
@@ -105,28 +128,6 @@ export const pushCommand = new Command()
               console.log(chalk.dim(`  • ${file}`));
             });
           }
-        } else {
-          pushSpinner.fail(chalk.red('Push completed with errors'));
-          
-          // Show errors
-          if (pushResult.errors.length > 0) {
-            console.log();
-            console.log(chalk.red(`❌ ${pushResult.errors.length} error(s):`));
-            pushResult.errors.forEach(error => {
-              console.log(chalk.red(`  • ${error.file}: ${error.message}`));
-            });
-          }
-          
-          // Show successfully pushed files
-          if (pushResult.pushedFiles.length > 0) {
-            console.log();
-            console.log(chalk.yellow(`⚠️  ${pushResult.pushedFiles.length} file(s) pushed successfully before errors:`));
-            pushResult.pushedFiles.forEach(file => {
-              console.log(chalk.dim(`  • ${file}`));
-            });
-          }
-          
-          process.exit(1);
         }
         
         console.log();

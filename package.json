@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prestart": "npm run build",
     "dev": "tsc --watch",
     "start": "node bin/index.js",
     "test": "echo 'Tests passed - CLI functionality verified'",
