@@ -326,7 +326,7 @@ export class ApiService {
     try {
       await this.applyDelay();
       this.serviceLogger.debug('Fetching tables from Bizmanage API');
-      const response = await this.client.get('/restapi/customization/tables?custom_fields=true');
+      const response = await this.client.get('/restapi/customization/tables?custom_fields=true&real_tables_only=true');
       this.serviceLogger.debug(`Fetched ${response.data.length} tables`);
       return response.data;
     } catch (error: any) {
@@ -343,7 +343,7 @@ export class ApiService {
     try {
       await this.applyDelay();
       this.serviceLogger.debug(`Fetching table definition for: ${tableName}`);
-      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}`);
+      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}&real_tables_only=true`);
       
       // Response should be an array with one item, or a single object
       const tableData = Array.isArray(response.data) ? response.data[0] : response.data;
