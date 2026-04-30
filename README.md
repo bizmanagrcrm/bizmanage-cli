@@ -698,13 +698,17 @@ bizmanage login --silent
 bizmanage login -v
 bizmanage login --verbose
 
-# Very verbose mode - shows DEBUG level messages (includes HTTP requests/responses)
+# Very verbose mode - shows DEBUG level messages
 bizmanage login -vv
 bizmanage login --very-verbose
 
 # Extra verbose mode - shows TRACE level messages (maximum detail)
 bizmanage login -vvv
 bizmanage login --extra-verbose
+
+# BizManage wire debug - prints every request, response, and error message
+bizmanage login -vvvv
+bizmanage login --bizmanage-debug
 
 # Debug mode - same as very verbose, useful for development
 bizmanage login --debug
@@ -720,8 +724,9 @@ bizmanage login -vv --log-timestamps
 - **ERROR** (`--silent`): Only critical errors
 - **WARN** (default): Errors and warnings
 - **INFO** (`-v`): Errors, warnings, and informational messages
-- **DEBUG** (`-vv`, `--debug`): All above plus HTTP requests/responses, service details
+- **DEBUG** (`-vv`, `--debug`): All above plus service details
 - **TRACE** (`-vvv`): Maximum verbosity including internal operations
+- **BIZMANAGE** (`-vvvv`, `--bizmanage-debug`): All above plus every BizManage request, response, and API error message
 
 **Features:**
 - Built on [Winston](https://github.com/winstonjs/winston) for robust logging

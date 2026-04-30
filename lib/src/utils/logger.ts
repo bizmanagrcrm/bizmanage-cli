@@ -10,8 +10,18 @@ export enum LogLevel {
   WARN = 'warn',
   INFO = 'info',
   DEBUG = 'debug',
-  TRACE = 'silly' // Winston uses 'silly' for trace level
+  TRACE = 'silly',
+  BIZMANAGE = 'wire'
 }
+
+const LOG_LEVELS = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  debug: 3,
+  silly: 4,
+  wire: 5
+} as const;
 
 export interface LoggerConfig {
   level: LogLevel;
@@ -53,6 +63,9 @@ const cliFormatter = winston.format.printf(({ level, message, prefix, timestamp,
     case 'silly':
       levelLabel = chalk.dim('TRACE');
       break;
+    case 'wire':
+      levelLabel = chalk.cyan('BIZ');
+      break;
     default:
       levelLabel = level.toUpperCase();
   }
@@ -80,6 +93,7 @@ export class Logger {
   constructor(config: LoggerConfig) {
     this.config = config;
     this.winston = winston.createLogger({
+      levels: LOG_LEVELS,
       level: config.level,
       silent: config.silent || false,
       format: winston.format.combine(
@@ -197,6 +211,17 @@ export class Logger {
   }
 
   /**
+   * Log BizManage HTTP wire traffic
+   */
+  bizmanage(message: string, meta?: any): void {
+    this.winston.log(LogLevel.BIZMANAGE, message, {
+      prefix: this.config.prefix,
+      timestamp: this.config.timestamp,
+      ...meta
+    });
+  }
+
+  /**
    * Log a success message (maps to info level with green color)
    */
   success(message: string, meta?: any): void {
@@ -220,22 +245,33 @@ export class Logger {
   }
 
   /**
-   * Log HTTP request details (debug level)
+   * Log HTTP request details (BizManage wire level)
    */
   logRequest(method: string, url: string, headers?: any, data?: any): void {
-    this.debug(`HTTP ${method.toUpperCase()} ${url}`, {
+    this.bizmanage(`HTTP ${method.toUpperCase()} ${url}`, {
       headers: headers ? this.sanitizeHeaders(headers) : undefined,
       requestData: data || undefined
     });
   }
 
   /**
-   * Log HTTP response details (debug level)
+   * Log HTTP response details (BizManage wire level)
    */
   logResponse(status: number, url: string, data?: any, responseTime?: number): void {
     const statusColor = status >= 400 ? chalk.red : status >= 300 ? chalk.yellow : chalk.green;
     const responseMsg = `HTTP ${statusColor(status)} ${url}${responseTime ? ` (${responseTime}ms)` : ''}`;
-    this.debug(responseMsg, { responseData: data });
+    this.bizmanage(responseMsg, { responseData: data });
+  }
+
+  /**
+   * Log BizManage HTTP error details
+   */
+  logResponseError(method: string, url: string, errorMessage: string, status?: number, data?: any, responseTime?: number): void {
+    const statusPart = status ? ` ${status}` : '';
+    const timingPart = responseTime ? ` (${responseTime}ms)` : '';
+    this.error(`HTTP ${method.toUpperCase()} ${url}${statusPart}${timingPart}: ${errorMessage}`, {
+      responseData: data
+    });
   }
 
   /**
@@ -276,4 +312,5 @@ export const logWarn = (message: string, data?: any) => logger.warn(message, dat
 export const logInfo = (message: string, data?: any) => logger.info(message, data);
 export const logDebug = (message: string, data?: any) => logger.debug(message, data);
 export const logTrace = (message: string, data?: any) => logger.trace(message, data);
+export const logBizmanage = (message: string, data?: any) => logger.bizmanage(message, data);
 export const logSuccess = (message: string, data?: any) => logger.success(message, data);

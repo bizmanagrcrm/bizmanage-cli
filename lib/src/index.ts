@@ -22,6 +22,7 @@ export function cli() {
     .option('-v, --verbose', 'enable verbose output (INFO level)')
     .option('-vv, --very-verbose', 'enable very verbose output (DEBUG level)')
     .option('-vvv, --extra-verbose', 'enable extra verbose output (TRACE level)')
+    .option('-vvvv, --bizmanage-debug', 'print every BizManage request and response')
     .option('--debug', 'enable debug mode (DEBUG level)')
     .option('--silent', 'suppress all output except errors')
     .option('--log-timestamps', 'include timestamps in log output');
@@ -36,6 +37,8 @@ export function cli() {
     if (options.silent) {
       silent = true;
       logLevel = LogLevel.ERROR;
+    } else if (options.bizmanageDebug) {
+      logLevel = LogLevel.BIZMANAGE;
     } else if (options.extraVerbose) {
       logLevel = LogLevel.TRACE;
     } else if (options.veryVerbose || options.debug) {

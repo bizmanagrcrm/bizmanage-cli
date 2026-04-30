@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import chalk from 'chalk';
 import { AuthConfig } from './auth.js';
 import { 
@@ -227,6 +227,67 @@ export class ApiService {
       },
       timeout: 30000
     });
+
+    this.client.interceptors.request.use(
+      (requestConfig) => {
+        (requestConfig as InternalAxiosRequestConfig & { requestStartTime?: number }).requestStartTime = Date.now();
+
+        this.serviceLogger.logRequest(
+          requestConfig.method || 'GET',
+          this.formatRequestUrl(requestConfig),
+          requestConfig.headers,
+          requestConfig.data
+        );
+
+        return requestConfig;
+      },
+      (error: AxiosError) => {
+        this.serviceLogger.error(`Request setup failed: ${error.message}`);
+        return Promise.reject(error);
+      }
+    );
+
+    this.client.interceptors.response.use(
+      (response) => {
+        const responseTime = this.getResponseTime(response.config);
+
+        this.serviceLogger.logResponse(
+          response.status,
+          this.formatRequestUrl(response.config),
+          response.data,
+          responseTime
+        );
+
+        return response;
+      },
+      (error: AxiosError) => {
+        const requestConfig = error.config;
+        const responseTime = requestConfig ? this.getResponseTime(requestConfig) : undefined;
+        const method = requestConfig?.method || 'GET';
+        const url = requestConfig ? this.formatRequestUrl(requestConfig) : this.config.instanceUrl;
+
+        this.serviceLogger.logResponseError(
+          method,
+          url,
+          error.response?.data && typeof error.response.data === 'object' && 'message' in error.response.data
+            ? String((error.response.data as { message?: unknown }).message)
+            : error.message,
+          error.response?.status,
+          error.response?.data,
+          responseTime
+        );
+
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  private formatRequestUrl(requestConfig: Pick<InternalAxiosRequestConfig, 'baseURL' | 'url'>): string {
+    return `${requestConfig.baseURL || this.config.instanceUrl}${requestConfig.url || ''}`;
+  }
+
+  private getResponseTime(requestConfig: InternalAxiosRequestConfig & { requestStartTime?: number }): number | undefined {
+    return requestConfig.requestStartTime ? Date.now() - requestConfig.requestStartTime : undefined;
   }
 
   /**

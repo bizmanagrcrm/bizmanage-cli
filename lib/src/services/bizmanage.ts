@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import chalk from 'chalk';
 import { AuthConfig } from './auth.js';
 import { logger } from '../utils/logger.js';
@@ -40,20 +40,20 @@ export class BizmanageService {
 
     // Add request interceptor for logging
     this.client.interceptors.request.use(
-      (config) => {
+      (requestConfig) => {
         // Add timestamp for response time calculation
-        (config as any).requestStartTime = Date.now();
+        (requestConfig as InternalAxiosRequestConfig & { requestStartTime?: number }).requestStartTime = Date.now();
         
         this.serviceLogger.logRequest(
-          config.method?.toUpperCase() || 'UNKNOWN',
-          `${config.baseURL}${config.url}`,
-          config.headers,
-          config.data
+          requestConfig.method || 'GET',
+          this.formatRequestUrl(requestConfig),
+          requestConfig.headers,
+          requestConfig.data
         );
-        return config;
+        return requestConfig;
       },
-      (error) => {
-        this.serviceLogger.error('Request failed', error);
+      (error: AxiosError) => {
+        this.serviceLogger.error(`Request setup failed: ${error.message}`);
         return Promise.reject(error);
       }
     );
@@ -61,34 +61,45 @@ export class BizmanageService {
     // Add response interceptor for logging
     this.client.interceptors.response.use(
       (response) => {
-        const startTime = (response.config as any).requestStartTime;
-        const responseTime = startTime ? Date.now() - startTime : undefined;
+        const responseTime = this.getResponseTime(response.config as InternalAxiosRequestConfig & { requestStartTime?: number });
         
         this.serviceLogger.logResponse(
           response.status,
-          response.config.url || '',
+          this.formatRequestUrl(response.config),
           response.data,
           responseTime
         );
         return response;
       },
-      (error) => {
+      (error: AxiosError) => {
         if (error.response) {
-          const startTime = (error.config as any)?.requestStartTime;
-          const responseTime = startTime ? Date.now() - startTime : undefined;
+          const requestConfig = error.config as (InternalAxiosRequestConfig & { requestStartTime?: number }) | undefined;
+          const responseTime = requestConfig ? this.getResponseTime(requestConfig) : undefined;
           
-          this.serviceLogger.logResponse(
+          this.serviceLogger.logResponseError(
+            requestConfig?.method || 'GET',
+            requestConfig ? this.formatRequestUrl(requestConfig) : this.config.instanceUrl,
+            error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data
+              ? String((error.response.data as { message?: unknown }).message)
+              : error.message,
             error.response.status,
-            error.config?.url || '',
             error.response.data,
             responseTime
           );
         } else {
-          this.serviceLogger.error('Network error', error.message);
+          this.serviceLogger.error(`Network error: ${error.message}`);
         }
         return Promise.reject(error);
       }
     );
+  }
+
+  private formatRequestUrl(requestConfig: Pick<InternalAxiosRequestConfig, 'baseURL' | 'url'>): string {
+    return `${requestConfig.baseURL || this.config.instanceUrl}${requestConfig.url || ''}`;
+  }
+
+  private getResponseTime(requestConfig: InternalAxiosRequestConfig & { requestStartTime?: number }): number | undefined {
+    return requestConfig.requestStartTime ? Date.now() - requestConfig.requestStartTime : undefined;
   }
 
   /**
