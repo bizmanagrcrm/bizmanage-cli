@@ -48,6 +48,8 @@ npm link
 
 3. **Make changes to your code in the `./src` directory**
 
+   `src/` is your source of truth. Pull writes platform customizations into your local codebase, you review and edit those files in git, and push deploys the contents of that codebase back to Bizmanage.
+
 4. **Push changes back to the platform:**
    ```bash
    bizmanage push
@@ -128,7 +130,7 @@ bizmanage init [project-name] [options]
 1. Prompts for project name (if not provided) and description
 2. Creates project directory structure (`src/objects`, `src/backend`, `src/reports`, `src/pages`)
 3. Generates `bizmanage.config.json` with project metadata
-4. Creates `.gitignore` file configured for Bizmanage projects
+4. Creates `.gitignore` that keeps `src/` tracked and ignores only local Bizmanage cache/runtime files
 5. Sets up `.bizmanage` directory for cache and internal files
 
 **Created Structure:**
@@ -478,47 +480,55 @@ Each `meta.json` file contains:
 
 ## Version Control Strategy
 
-⚠️ **Important**: The pulled data should NOT be committed to your repository!
+**Your Bizmanage project repository is the source of truth. Commit the customization files in `src/`.**
 
-The `.gitignore` file is configured to exclude:
-- `src/objects/` - Generated table/view definitions and actions
-- `src/backend/` - Generated backend scripts  
-- `src/reports/` - Generated SQL reports
-- `src/pages/` - Generated HTML pages
-- `bizmanage.config.json` - Project configuration (may contain sensitive URLs)
+The intended workflow is:
 
-### Why exclude pulled data?
+1. `bizmanage pull` writes the current platform state into your local codebase
+2. You review, edit, branch, diff, and commit those files in git
+3. `bizmanage push` deploys the contents of that codebase back to Bizmanage
 
-1. **Instance-specific**: Each developer should pull from their own Bizmanage instance
-2. **Sensitive information**: May contain API keys, instance URLs, or business logic
-3. **Generated content**: These files are automatically created and should not be manually edited in version control
-4. **Environment differences**: Different instances may have different customizations
+### What should be committed
 
-### Recommended workflow:
+- `src/objects/` - Table/view definitions, fields, and actions
+- `src/backend/` - Backend scripts
+- `src/reports/` - SQL reports
+- `src/pages/` - Custom pages
+- `bizmanage.config.json` - Project-level configuration for the Bizmanage project
+
+### What should be ignored
+
+- `.bizmanage/` - Local cache and internal CLI state
+- `.bizmanage/file-hashes.json` - Hash cache used for change detection
+- Standard local-only files such as `node_modules/`, logs, editor settings, and `.env*`
+
+### Why the hash cache is ignored
+
+`.bizmanage/file-hashes.json` is not source code. It is local operational state used by the CLI to detect what changed between pull and push operations. It can always be rebuilt, and committing it would create noisy diffs and inconsistent cache state across teammates.
+
+### Recommended workflow
 
 ```bash
-# Each developer on your team should:
 git clone your-repo
 cd your-repo
 npm install
 
-# Login to their own Bizmanage instance  
+# Authenticate to the target instance
 bizmanage login
 
-# Pull their own data
+# Pull the current platform state into the repo
 bizmanage pull --init
 
-# Work with the pulled files locally
-# Make changes and push back to their instance
+# Review and edit tracked files in src/
+git status
+
+# Commit your customization changes
+git add src bizmanage.config.json
+git commit -m "Update Bizmanage customizations"
+
+# Deploy the committed codebase back to the platform
 bizmanage push
 ```
-
-### What IS committed to git:
-
-- CLI source code and configuration
-- Documentation and examples  
-- Build scripts and dependencies
-- Empty directories with `.gitkeep` files to maintain structure
 
 ## Metadata Schema
 
