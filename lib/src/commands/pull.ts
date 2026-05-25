@@ -185,6 +185,16 @@ export const pullCommand = new Command()
 
       const shouldFetchTables = Array.from(selection.targets).some((target) => OBJECT_SCOPED_PULL_TARGETS.has(target));
       let tables: BizmanageTableResponse[] = [];
+      const objectsByTable = new Map<string, {
+        name: string;
+        definition: any;
+        actions: Array<{
+          name: string;
+          code?: string;
+          metadata: any;
+        }>;
+      }>();
+      const tablesWithFields = new Set<string>();
 
       if (shouldFetchTables) {
         const tablesSpinner = ora('Fetching tables from Bizmanage API...').start();
@@ -237,16 +247,6 @@ export const pullCommand = new Command()
         const objectsSpinner = ora('Fetching full table definitions...').start();
 
         try {
-          const objects: Array<{
-            name: string;
-            definition: any;
-            actions: Array<{
-              name: string;
-              code?: string;
-              metadata: any;
-            }>;
-          }> = [];
-
           for (let i = 0; i < tables.length; i++) {
             const table = tables[i];
             const tableName = table.internal_name || table.display_name;
@@ -254,7 +254,7 @@ export const pullCommand = new Command()
 
             try {
               const fullDefinition = await apiService.fetchTableDefinition(tableName);
-              objects.push({
+              objectsByTable.set(tableName, {
                 name: tableName,
                 definition: fullDefinition,
                 actions: []
@@ -264,26 +264,11 @@ export const pullCommand = new Command()
             }
           }
 
-          objectsSpinner.text = `Processing objects (${objects.length} items)...`;
-
-          if (objects.length === 0) {
-            objectsSpinner.succeed(`${chalk.green('✓')} Objects: 0 items processed`);
-          } else {
-            const objectResult = await projectService.writeObjectsWithRawDefinitions(projectPath, objects);
-
-            if (objectResult.success) {
-              results.objects = objectResult.itemCount;
-              objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
-            } else {
-              objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
-              serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
-              process.exit(1);
-            }
-          }
+          objectsSpinner.succeed(`${chalk.green('✓')} Objects: Fetched ${objectsByTable.size} definitions`);
         } catch (error) {
-          objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
+          objectsSpinner.fail(`${chalk.red('✗')} Failed to fetch object definitions`);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
+          serviceLogger.error(chalk.red(`❌ Pull failed during object definition fetching: ${errorMessage}`));
           process.exit(1);
         }
       }
@@ -309,6 +294,7 @@ export const pullCommand = new Command()
                 : fields;
 
               if (filteredFields.length > 0) {
+                tablesWithFields.add(tableName);
                 const fieldResult = await projectService.writeFields(projectPath, tableName, filteredFields);
                 if (fieldResult.success) {
                   totalFields += fieldResult.itemCount;
@@ -330,15 +316,55 @@ export const pullCommand = new Command()
         }
       }
 
+      if (selection.targets.has('objects')) {
+        const objectsSpinner = ora('Writing object definitions...').start();
+
+        try {
+          const objectsToWrite = Array.from(objectsByTable.values()).filter((objectItem) => {
+            if (!selection.targets.has('fields')) {
+              return true;
+            }
+
+            return tablesWithFields.has(objectItem.name);
+          });
+
+          objectsSpinner.text = `Processing objects (${objectsToWrite.length} items)...`;
+
+          if (objectsToWrite.length === 0) {
+            objectsSpinner.succeed(`${chalk.green('✓')} Objects: 0 items processed`);
+          } else {
+            const objectResult = await projectService.writeObjectsWithRawDefinitions(projectPath, objectsToWrite);
+
+            if (objectResult.success) {
+              results.objects = objectResult.itemCount;
+              objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
+            } else {
+              objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
+              serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
+              process.exit(1);
+            }
+          }
+        } catch (error) {
+          objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
+          process.exit(1);
+        }
+      }
+
       let totalActions = 0;
       if (selection.targets.has('actions') && tables.length > 0) {
         const actionsSpinner = ora('Fetching actions for tables...').start();
 
         try {
-          for (let i = 0; i < tables.length; i++) {
-            const table = tables[i];
+          const tablesForActions = selection.targets.has('fields')
+            ? tables.filter((table) => tablesWithFields.has(table.internal_name || table.display_name))
+            : tables;
+
+          for (let i = 0; i < tablesForActions.length; i++) {
+            const table = tablesForActions[i];
             const tableName = table.internal_name || table.display_name;
-            actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tables.length})...`;
+            actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tablesForActions.length})...`;
 
             try {
               const actions = await apiService.fetchActions(tableName);
@@ -363,7 +389,7 @@ export const pullCommand = new Command()
             }
           }
 
-          actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tables.length} tables`);
+          actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tablesForActions.length} tables`);
         } catch (error) {
           actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';

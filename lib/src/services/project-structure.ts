@@ -674,6 +674,42 @@ export class ProjectStructureService {
   }
 
   /**
+   * Create boilerplate files for a new view/object.
+   */
+  async createViewBoilerplate(
+    projectPath: string,
+    internalName: string,
+    displayName: string,
+    options: { force?: boolean } = {}
+  ): Promise<{ objectDir: string; definitionPath: string; created: boolean }> {
+    const normalizedName = this.sanitizeName(internalName);
+    const objectDir = path.join(projectPath, 'src', 'objects', normalizedName);
+    const definitionPath = path.join(objectDir, 'definition.json');
+
+    if (await fs.pathExists(definitionPath) && !options.force) {
+      return { objectDir, definitionPath, created: false };
+    }
+
+    const definition: ObjectDefinition = {
+      internal_name: normalizedName,
+      display_name: displayName
+    };
+
+    await fs.ensureDir(path.join(objectDir, 'fields'));
+    await fs.ensureDir(path.join(objectDir, 'actions'));
+    await fs.ensureDir(path.join(objectDir, 'data'));
+    await fs.writeJSON(definitionPath, definition, { spaces: 2 });
+
+    this.serviceLogger.debug('Created view boilerplate', {
+      projectPath,
+      internalName: normalizedName,
+      definitionPath
+    });
+
+    return { objectDir, definitionPath, created: true };
+  }
+
+  /**
    * Check if a directory is a valid Bizmanage project
    */
   async isValidProject(projectPath: string): Promise<boolean> {

@@ -10,6 +10,7 @@ import { statusCommand } from './commands/status.js';
 import { statusDetailCommand } from './commands/status-detail.js';
 import { validateCommand } from './commands/validate.js';
 import { clearCacheCommand } from './commands/clear-cache.js';
+import { createViewCommand } from './commands/create-view.js';
 import { Logger, LogLevel, logger } from './utils/logger.js';
 
 const program = new Command();
@@ -68,6 +69,7 @@ export function cli() {
   program.addCommand(statusCommand);
   program.addCommand(statusDetailCommand);
   program.addCommand(initCommand);
+  program.addCommand(createViewCommand);
   program.addCommand(createTestCommand());
   program.addCommand(pullCommand);
   program.addCommand(pushCommand);

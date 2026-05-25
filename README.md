@@ -161,6 +161,39 @@ bizmanage init . --force
 bizmanage init my-project --alias production
 ```
 
+### `bizmanage create-view`
+
+Create a new local view scaffold inside an existing Bizmanage project.
+
+```bash
+bizmanage create-view <name> [options]
+```
+
+**Arguments:**
+- `<name>` - Internal view name
+
+**Options:**
+- `-p, --path <path>` - Project path (default: current directory)
+- `--display-name <name>` - Display name shown in Bizmanage
+- `--force` - Overwrite an existing scaffold for the same view
+
+**What it creates:**
+1. `src/objects/<view-name>/definition.json`
+2. Empty `fields/`, `actions/`, and `data/` directories
+3. A minimal valid definition boilerplate with `internal_name` and `display_name`
+
+**Examples:**
+```bash
+# Create a new scaffold in the current project
+bizmanage create-view customer-status
+
+# Create a scaffold with a custom display name
+bizmanage create-view customer_status --display-name "Customer Status"
+
+# Create the scaffold in another project directory
+bizmanage create-view approvals --path /path/to/project
+```
+
 ### `bizmanage status`
 
 Show current login status and saved API keys.
@@ -385,6 +418,8 @@ bizmanage pull [options]
 - `--script <name>` - Pull only matching backend scripts
 
 Targets and selectors can be repeated or passed as comma-separated values.
+
+When pulling fields, objects/views with no returned fields are skipped so the CLI does not create empty object folders for them.
 
 **Example:**
 ```bash
