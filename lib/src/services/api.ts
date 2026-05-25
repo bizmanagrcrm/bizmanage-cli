@@ -341,13 +341,13 @@ export class ApiService {
 
   /**
    * Fetch full table definition by internal name
-   * Endpoint: GET /restapi/customization/tables?internal_name=[table name]&real_tables_only=true&changed_only=true
+   * Endpoint: GET /restapi/customization/tables?internal_name=[table name]&real_tables_only=true
    */
   async fetchTableDefinition(tableName: string): Promise<any> {
     try {
       await this.applyDelay();
       this.serviceLogger.debug(`Fetching table definition for: ${tableName}`);
-      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}&real_tables_only=true&changed_only=true`);
+      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}&real_tables_only=true`);
       
       // Response should be an array with one item, or a single object
       const tableData = Array.isArray(response.data) ? response.data[0] : response.data;
