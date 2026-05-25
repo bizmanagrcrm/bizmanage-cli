@@ -9,10 +9,10 @@ import { CustomizationFile, PushService } from '../services/push.js';
 import { logger } from '../utils/logger.js';
 import { normalizeLocalName } from '../utils/local-name.js';
 
-const ALL_PUSH_TARGETS = ['objects', 'fields', 'actions', 'reports', 'pages', 'scripts'] as const;
+const ALL_PUSH_TARGETS = ['objects', 'fields', 'actions', 'reports', 'pages', 'scripts', 'data'] as const;
 type PushTarget = typeof ALL_PUSH_TARGETS[number];
 
-const OBJECT_SCOPED_PUSH_TARGETS = new Set<PushTarget>(['objects', 'fields', 'actions']);
+const OBJECT_SCOPED_PUSH_TARGETS = new Set<PushTarget>(['objects', 'fields', 'actions', 'data']);
 
 const PUSH_TARGET_ALIASES: Record<string, PushTarget> = {
   object: 'objects',
@@ -25,6 +25,8 @@ const PUSH_TARGET_ALIASES: Record<string, PushTarget> = {
   fields: 'fields',
   action: 'actions',
   actions: 'actions',
+  data: 'data',
+  datas: 'data',
   report: 'reports',
   reports: 'reports',
   page: 'pages',
@@ -72,7 +74,7 @@ export const pushCommand = new Command()
   .option('--all', 'Push all files (default: only changed files)')
   .option('--skip-tests', 'Skip running tests before deploy')
   .option('--skip-validation', 'Skip metadata validation')
-  .option('--include <target>', 'Push only selected targets: objects, fields, actions, reports, pages, scripts (repeatable or comma-separated)', collectPushOptionValues, [])
+  .option('--include <target>', 'Push only selected targets: objects, fields, actions, reports, pages, scripts, data (repeatable or comma-separated)', collectPushOptionValues, [])
   .option('--object <name>', 'Limit object-scoped pushes to matching tables/views (repeatable or comma-separated)', collectPushOptionValues, [])
   .option('--view <name>', 'Alias for --object', collectPushOptionValues, [])
   .option('--field <name>', 'Push only matching fields; supports table.field or table:field', collectPushOptionValues, [])
@@ -259,6 +261,8 @@ function filterPushFiles(files: CustomizationFile[], selection: PushSelection): 
           objectName ? [objectName] : [],
           [getItemNameFromPath(file.relativePath), file.metadata?.action_name, file.metadata?.title]
         );
+      case 'data':
+        return true;
       case 'report':
         return selection.reportSelectors.length === 0 || matchesAnySelector(
           selection.reportSelectors,
@@ -288,6 +292,8 @@ function mapFileTypeToTarget(type: CustomizationFile['type']): PushTarget {
       return 'fields';
     case 'action':
       return 'actions';
+    case 'data':
+      return 'data';
     case 'report':
       return 'reports';
     case 'page':
@@ -354,6 +360,7 @@ function resolvePushSelection(options: PushCommandOptions): PushSelection {
       targets.add('objects');
       targets.add('fields');
       targets.add('actions');
+      targets.add('data');
     }
 
     if (targets.size === 0) {
@@ -413,7 +420,7 @@ function normalizeTargets(values: string[]): PushTarget[] {
 
     const target = PUSH_TARGET_ALIASES[normalizedValue];
     if (!target) {
-      throw new Error(`Invalid push target "${value}". Use objects, fields, actions, reports, pages, or scripts.`);
+      throw new Error(`Invalid push target "${value}". Use objects, fields, actions, reports, pages, scripts, or data.`);
     }
 
     if (!targets.includes(target)) {

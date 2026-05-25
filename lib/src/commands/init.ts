@@ -165,7 +165,7 @@ temp/
       console.log(chalk.bold('Project structure:'));
       console.log(chalk.dim('  bizmanage.config.json  # Project configuration'));
       console.log(chalk.dim('  src/'));
-      console.log(chalk.dim('    objects/             # Tables/views and their actions'));
+      console.log(chalk.dim('    objects/             # Tables/views with definition.json, fields/, actions/, and data/'));
       console.log(chalk.dim('    backend/             # Server-side scripts'));
       console.log(chalk.dim('    reports/             # SQL reports'));
       console.log(chalk.dim('    pages/               # Custom HTML pages'));

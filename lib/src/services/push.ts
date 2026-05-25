@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js';
 import { HashCacheService } from './hash-cache.js';
 import { ApiService } from './api.js';
 import { AuthConfig } from './auth.js';
+import { parseDataFileRecords } from '../utils/data-records.js';
 
 export interface PushResult {
   success: boolean;
@@ -18,7 +19,7 @@ export interface PushError {
   message: string;
 }
 
-export type PushCustomizationType = 'object' | 'action' | 'field' | 'backend-script' | 'report' | 'page';
+export type PushCustomizationType = 'object' | 'action' | 'field' | 'data' | 'backend-script' | 'report' | 'page';
 
 export interface CustomizationFile {
   filePath: string;
@@ -52,6 +53,9 @@ export class PushService {
     }
     if (normalized.includes('/objects/') && normalized.includes('/fields/')) {
       return 'field';
+    }
+    if (normalized.includes('/objects/') && normalized.includes('/data/')) {
+      return 'data';
     }
     if (normalized.includes('/backend/')) {
       return 'backend-script';
@@ -180,6 +184,9 @@ export class PushService {
         break;
       case 'field':
         await this.pushField(file);
+        break;
+      case 'data':
+        await this.pushDataFile(file);
         break;
       case 'backend-script':
         await this.pushBackendScript(file);
@@ -344,6 +351,46 @@ export class PushService {
       });
     } catch (error) {
       this.serviceLogger.error('Failed to push field', {
+        path: file.relativePath,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Push table data records using internal_name upserts
+   */
+  private async pushDataFile(file: CustomizationFile): Promise<void> {
+    this.serviceLogger.debug('Pushing table data', { path: file.relativePath });
+
+    try {
+      const content = JSON.parse(file.content);
+      const records = parseDataFileRecords(content, file.relativePath);
+
+      const normalized = file.relativePath.replace(/\\/g, '/');
+      const match = normalized.match(/objects\/([^/]+)\/data\//);
+
+      if (!match) {
+        throw new Error(`Cannot extract table name from path: ${file.relativePath}`);
+      }
+
+      const tableName = match[1];
+
+      if (records.length === 0) {
+        this.serviceLogger.debug('Skipping empty data file', { path: file.relativePath, table: tableName });
+        return;
+      }
+
+      await this.apiService.pushDataRecords(tableName, records, file.relativePath);
+
+      this.serviceLogger.debug('Successfully pushed table data', {
+        table: tableName,
+        record_count: records.length,
+        path: file.relativePath
+      });
+    } catch (error) {
+      this.serviceLogger.error('Failed to push table data', {
         path: file.relativePath,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
@@ -609,10 +656,15 @@ export class PushService {
         return result;
       }
 
-      this.serviceLogger.debug('Pushing selected files', { count: files.length });
+      const orderedFiles = [...files].sort((left, right) => {
+        const orderDiff = this.getPushOrder(left.type) - this.getPushOrder(right.type);
+        return orderDiff !== 0 ? orderDiff : left.relativePath.localeCompare(right.relativePath);
+      });
+
+      this.serviceLogger.debug('Pushing selected files', { count: orderedFiles.length });
       await this.hashCache.initialize(projectPath);
 
-      for (const file of files) {
+      for (const file of orderedFiles) {
         try {
           await this.pushCustomization(file);
           result.pushedFiles.push(file.relativePath);
@@ -642,5 +694,24 @@ export class PushService {
     }
 
     return result;
+  }
+
+  private getPushOrder(type: PushCustomizationType): number {
+    switch (type) {
+      case 'object':
+        return 10;
+      case 'field':
+        return 20;
+      case 'action':
+        return 30;
+      case 'backend-script':
+        return 40;
+      case 'report':
+        return 50;
+      case 'page':
+        return 60;
+      case 'data':
+        return 100;
+    }
   }
 }

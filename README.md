@@ -301,6 +301,7 @@ bizmanage validate [options]
 - `object` - Object definitions (definition.json)
 - `action` - Actions (.js and .json files)
 - `field` - Field definitions
+- `data` - Table data seed files (.json object or array files under `src/objects/<table>/data/`)
 - `backend-script` - Backend scripts (.js and .json)
 - `report` - Reports (.sql and .json)
 - `page` - Pages (.html and .json)
@@ -434,7 +435,7 @@ bizmanage push [options]
 - `--all` - Push all files (default: only changed files)
 - `--skip-tests` - Skip running tests before deploy
 - `--skip-validation` - Skip metadata validation
-- `--include <target>` - Push only selected targets: objects, fields, actions, reports, pages, scripts
+- `--include <target>` - Push only selected targets: objects, fields, actions, reports, pages, scripts, data
 - `--object <name>` - Limit object-scoped pushes to matching tables/views
 - `--view <name>` - Alias for `--object`
 - `--field <name>` - Push only matching fields; supports `table.field` or `table:field`
@@ -510,10 +511,16 @@ After running `bizmanage pull`, your local directory will be organized as follow
 │   ├── meta.json                 # Metadata for all scripts
 │   ├── data-processor.js         # Backend script code
 │   └── email-scheduler.js
-└── fields/
-    ├── meta.json                 # Metadata for all fields
-    ├── custom-field-1.json       # Field configuration
-    └── validation-field.json
+└── objects/
+    └── status-codes/
+        ├── definition.json
+        ├── fields/
+        │   ├── internal_name.json
+        │   └── display_name.json
+        ├── actions/
+        └── data/
+            ├── default-statuses.json   # JSON object or array of records, upserted by internal_name
+            └── archived.json
 ```
 
 Each `meta.json` file contains:
@@ -534,7 +541,7 @@ The intended workflow is:
 
 ### What should be committed
 
-- `src/objects/` - Table/view definitions, fields, and actions
+- `src/objects/` - Table/view definitions, fields, actions, and optional `data/` seed records for master tables
 - `src/backend/` - Backend scripts
 - `src/reports/` - SQL reports
 - `src/pages/` - Custom pages

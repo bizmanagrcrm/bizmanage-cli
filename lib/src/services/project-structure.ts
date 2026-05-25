@@ -250,6 +250,8 @@ export class ProjectStructureService {
       for (const obj of objects) {
         const objectDir = path.join(objectsPath, this.sanitizeName(obj.name));
         await fs.ensureDir(objectDir);
+        await fs.ensureDir(path.join(objectDir, 'fields'));
+        await fs.ensureDir(path.join(objectDir, 'data'));
 
         // Write definition.json with raw definition (id and meta fields already removed)
         await this.hashCache.writeJSONIfChanged(
@@ -329,6 +331,8 @@ export class ProjectStructureService {
       for (const obj of objects) {
         const objectDir = path.join(objectsPath, this.sanitizeName(obj.name));
         await fs.ensureDir(objectDir);
+        await fs.ensureDir(path.join(objectDir, 'fields'));
+        await fs.ensureDir(path.join(objectDir, 'data'));
 
         // Write definition.json
         await this.hashCache.writeJSONIfChanged(

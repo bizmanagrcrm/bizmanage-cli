@@ -10,6 +10,7 @@ import {
   ScriptMetadataSchema
 } from '../schemas/project-structure.js';
 import { HashCacheService } from './hash-cache.js';
+import { getDataFileValidationErrors } from '../utils/data-records.js';
 
 // AsyncFunction constructor for validating async/await syntax
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
@@ -33,7 +34,7 @@ export interface ValidationWarning {
   message: string;
 }
 
-export type CustomizationType = 'object' | 'action' | 'field' | 'backend-script' | 'report' | 'page' | 'unknown';
+export type CustomizationType = 'object' | 'action' | 'field' | 'data' | 'backend-script' | 'report' | 'page' | 'unknown';
 
 export class ValidationService {
   private serviceLogger = logger.child('ValidationService');
@@ -52,6 +53,9 @@ export class ValidationService {
     }
     if (normalized.includes('/objects/') && normalized.includes('/fields/')) {
       return 'field';
+    }
+    if (normalized.includes('/objects/') && normalized.includes('/data/')) {
+      return 'data';
     }
     if (normalized.includes('/backend/')) {
       return 'backend-script';
@@ -109,6 +113,9 @@ export class ValidationService {
           break;
         case 'field':
           await this.validateField(filePath, result);
+          break;
+        case 'data':
+          await this.validateData(filePath, result);
           break;
         case 'backend-script':
           await this.validateBackendScript(filePath, result);
@@ -377,6 +384,23 @@ export class ValidationService {
         type: 'field',
         message: 'Field type is required'
       });
+      result.valid = false;
+    }
+  }
+
+  private async validateData(filePath: string, result: ValidationResult): Promise<void> {
+    const content = await fs.readJSON(filePath);
+    const errors = getDataFileValidationErrors(content);
+
+    for (const message of errors) {
+      result.errors.push({
+        file: filePath,
+        type: 'data',
+        message
+      });
+    }
+
+    if (errors.length > 0) {
       result.valid = false;
     }
   }

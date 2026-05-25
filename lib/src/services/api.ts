@@ -10,6 +10,10 @@ import {
   ScriptMetadata
 } from '../schemas/project-structure.js';
 import { logger } from '../utils/logger.js';
+import {
+  BizmanageDataRecord,
+  DATA_RECORD_UPSERT_ENDPOINT_PLACEHOLDER
+} from '../utils/data-records.js';
 
 export interface Customization {
   name: string;
@@ -820,6 +824,68 @@ export class ApiService {
           || error.response.statusText;
         throw new Error(`Failed to push field definition for ${tableName}: ${errorMsg}`);
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Push table data records to the platform.
+   * Replace DATA_RECORD_UPSERT_ENDPOINT_PLACEHOLDER when the final endpoint is known.
+   */
+  async pushDataRecords(tableName: string, records: BizmanageDataRecord[], sourceFilePath?: string): Promise<void> {
+    for (const record of records) {
+      await this.pushDataRecord(tableName, record, sourceFilePath);
+    }
+  }
+
+  private async pushDataRecord(tableName: string, record: BizmanageDataRecord, sourceFilePath?: string): Promise<any> {
+    try {
+      await this.applyDelay();
+
+      const payload = {
+        table: tableName,
+        ...record
+      };
+
+      this.serviceLogger.debug('Pushing data record', {
+        table: tableName,
+        internal_name: record.internal_name,
+        payload: JSON.stringify(payload, null, 2)
+      });
+
+      const response = await this.client.post(
+        DATA_RECORD_UPSERT_ENDPOINT_PLACEHOLDER,
+        payload,
+        this.createRequestConfig(sourceFilePath)
+      );
+
+      this.serviceLogger.debug('Successfully pushed data record', {
+        table: tableName,
+        internal_name: record.internal_name,
+        status: response.status
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.serviceLogger.error('Failed to push data record', {
+        filePath: sourceFilePath,
+        table: tableName,
+        internal_name: record.internal_name,
+        endpoint: DATA_RECORD_UPSERT_ENDPOINT_PLACEHOLDER,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        message: error.response?.data?.message || error.message
+      });
+
+      if (error.response) {
+        const errorMsg = error.response.data?.message
+          || error.response.data?.error
+          || JSON.stringify(error.response.data)
+          || error.response.statusText;
+        throw new Error(`Failed to push data record for ${tableName}.${record.internal_name}: ${errorMsg}`);
+      }
+
       throw error;
     }
   }
