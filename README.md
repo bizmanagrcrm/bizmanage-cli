@@ -374,6 +374,16 @@ bizmanage pull [options]
 - `-d, --delay <ms>` - Delay in milliseconds between API requests (default: 0)
 - `--init` - Initialize a new project structure
 - `-f, --force` - Force pull even when local changes exist (overwrites local files)
+- `--include <target>` - Pull only selected targets: objects, fields, actions, reports, pages, scripts
+- `--object <name>` - Limit object-scoped pulls to matching tables/views
+- `--view <name>` - Alias for `--object`
+- `--field <name>` - Pull only matching fields; supports `table.field` or `table:field`
+- `--action <name>` - Pull only matching actions; supports `table.action` or `table:action`
+- `--report <name>` - Pull only matching reports
+- `--page <name>` - Pull only matching pages
+- `--script <name>` - Pull only matching backend scripts
+
+Targets and selectors can be repeated or passed as comma-separated values.
 
 **Example:**
 ```bash
@@ -394,6 +404,18 @@ bizmanage pull --delay 500
 
 # Pull and overwrite local changes (use only after committing/pushing your work)
 bizmanage pull -f
+
+# Pull only pages
+bizmanage pull --include pages
+
+# Pull actions for a specific object/view
+bizmanage pull --include actions --object customers
+
+# Pull a specific field
+bizmanage pull --field customers.status
+
+# Pull specific reports and pages
+bizmanage pull --report sales-summary --page /dashboards/team-overview
 ```
 
 > Pull safety: If local changes are detected, the pull is blocked to avoid overwriting your work. Commit and push your changes first, or rerun with `-f` to forcefully overwrite local files (the CLI clears its hash cache in force mode so every pulled file is rewritten).
@@ -412,6 +434,16 @@ bizmanage push [options]
 - `--all` - Push all files (default: only changed files)
 - `--skip-tests` - Skip running tests before deploy
 - `--skip-validation` - Skip metadata validation
+- `--include <target>` - Push only selected targets: objects, fields, actions, reports, pages, scripts
+- `--object <name>` - Limit object-scoped pushes to matching tables/views
+- `--view <name>` - Alias for `--object`
+- `--field <name>` - Push only matching fields; supports `table.field` or `table:field`
+- `--action <name>` - Push only matching actions; supports `table.action` or `table:action`
+- `--report <name>` - Push only matching reports
+- `--page <name>` - Push only matching pages
+- `--script <name>` - Push only matching backend scripts
+
+Targets and selectors can be repeated or passed as comma-separated values.
 
 **Features:**
 - **Smart deployment** - By default, only pushes changed/new files for faster deployments
@@ -446,6 +478,18 @@ bizmanage push --alias production
 
 # Push from custom project directory
 bizmanage push --source /path/to/project
+
+# Push only reports
+bizmanage push --include reports
+
+# Push actions for a specific object/view
+bizmanage push --include actions --object customers
+
+# Push a specific field
+bizmanage push --field customers.status
+
+# Push specific pages and scripts
+bizmanage push --page /dashboards/team-overview --script recalculate-totals
 ```
 
 ## Project Structure

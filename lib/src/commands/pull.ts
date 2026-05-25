@@ -8,6 +8,63 @@ import { ProjectStructureService } from '../services/project-structure.js';
 import { BizmanageService } from '../services/bizmanage.js';
 import { logger } from '../utils/logger.js';
 import { HashCacheService } from '../services/hash-cache.js';
+import { normalizeLocalName } from '../utils/local-name.js';
+
+const ALL_PULL_TARGETS = ['objects', 'fields', 'actions', 'reports', 'pages', 'scripts'] as const;
+type PullTarget = typeof ALL_PULL_TARGETS[number];
+
+const OBJECT_SCOPED_PULL_TARGETS = new Set<PullTarget>(['objects', 'fields', 'actions']);
+
+const PULL_TARGET_ALIASES: Record<string, PullTarget> = {
+  object: 'objects',
+  objects: 'objects',
+  table: 'objects',
+  tables: 'objects',
+  view: 'objects',
+  views: 'objects',
+  field: 'fields',
+  fields: 'fields',
+  action: 'actions',
+  actions: 'actions',
+  report: 'reports',
+  reports: 'reports',
+  page: 'pages',
+  pages: 'pages',
+  script: 'scripts',
+  scripts: 'scripts',
+  backend: 'scripts',
+  'backend-script': 'scripts',
+  'backend-scripts': 'scripts'
+};
+
+interface PullCommandOptions {
+  alias: string;
+  output: string;
+  init?: boolean;
+  delay: string;
+  force?: boolean;
+  include: string[];
+  object: string[];
+  view: string[];
+  field: string[];
+  action: string[];
+  report: string[];
+  page: string[];
+  script: string[];
+}
+
+interface PullSelection {
+  targets: Set<PullTarget>;
+  objectSelectors: string[];
+  fieldSelectors: string[];
+  actionSelectors: string[];
+  reportSelectors: string[];
+  pageSelectors: string[];
+  scriptSelectors: string[];
+  isSelective: boolean;
+  summary: string;
+}
+
 export const pullCommand = new Command()
   .name('pull')
   .description('Pull customizations from Bizmanage platform to local filesystem')
@@ -16,7 +73,15 @@ export const pullCommand = new Command()
   .option('--init', 'Initialize a new project structure')
   .option('-d, --delay <ms>', 'Delay in milliseconds between API requests (default: 0 for fast pulls)', '0')
   .option('-f, --force', 'Force pull even if local changes are detected (overwrites local files)')
-  .action(async (options: { alias: string; output: string; init?: boolean; delay: string; force?: boolean }) => {
+  .option('--include <target>', 'Pull only selected targets: objects, fields, actions, reports, pages, scripts (repeatable or comma-separated)', collectPullOptionValues, [])
+  .option('--object <name>', 'Limit object-scoped pulls to matching tables/views (repeatable or comma-separated)', collectPullOptionValues, [])
+  .option('--view <name>', 'Alias for --object', collectPullOptionValues, [])
+  .option('--field <name>', 'Pull only matching fields; supports table.field or table:field', collectPullOptionValues, [])
+  .option('--action <name>', 'Pull only matching actions; supports table.action or table:action', collectPullOptionValues, [])
+  .option('--report <name>', 'Pull only matching reports', collectPullOptionValues, [])
+  .option('--page <name>', 'Pull only matching pages', collectPullOptionValues, [])
+  .option('--script <name>', 'Pull only matching backend scripts', collectPullOptionValues, [])
+  .action(async (options: PullCommandOptions) => {
     const serviceLogger = logger.child('PullCommand');
     serviceLogger.info(chalk.blue('⬇️  Pulling customizations from Bizmanage platform'));
 
@@ -35,10 +100,9 @@ export const pullCommand = new Command()
       serviceLogger.debug(`Instance: ${config.instanceUrl}`);
       serviceLogger.debug(`Output directory: ${path.resolve(options.output)}`);
 
-      // Test connection first
       const bizmanageService = new BizmanageService(config);
       const connectionTest = await bizmanageService.testConnection();
-      
+
       if (!connectionTest.success) {
         serviceLogger.error(chalk.red(`❌ Connection test failed: ${connectionTest.message}`));
         process.exit(1);
@@ -58,17 +122,16 @@ export const pullCommand = new Command()
 
       const apiService = new ApiService(config, delayMs);
       const projectService = new ProjectStructureService();
-      
-      // Check if this is a new project or existing one
+      const selection = resolvePullSelection(options);
+
       const isExistingProject = await projectService.isValidProject(projectPath);
-      
+
       if (options.init || !isExistingProject) {
         if (isExistingProject && !options.init) {
           serviceLogger.warn(chalk.yellow('⚠️  Existing project found. Use --init flag to reinitialize.'));
         } else {
-          // Initialize new project
           const spinner = ora('Initializing project structure...').start();
-          
+
           try {
             await projectService.initializeProject(projectPath, {
               name: path.basename(projectPath),
@@ -76,7 +139,7 @@ export const pullCommand = new Command()
               instanceUrl: config.instanceUrl,
               alias: options.alias
             });
-            
+
             spinner.succeed(chalk.green('✓ Project structure initialized'));
           } catch (error) {
             spinner.fail(chalk.red('✗ Failed to initialize project'));
@@ -85,7 +148,6 @@ export const pullCommand = new Command()
         }
       }
 
-      // Prevent overwriting local changes unless --force is provided
       const hashCache = new HashCacheService();
       if (isExistingProject && !options.init) {
         await hashCache.initialize(projectPath);
@@ -104,13 +166,15 @@ export const pullCommand = new Command()
             process.exit(1);
           }
         } else {
-          // Force mode: clear cache so all pulled files overwrite local copies and hashes refresh
           await hashCache.clear();
           serviceLogger.warn(chalk.yellow('⚠️  Force pull enabled - local files will be overwritten'));
         }
       }
 
-      // Pull different types of customizations
+      if (selection.isSelective) {
+        serviceLogger.info(chalk.dim(`Selection: ${selection.summary}`));
+      }
+
       const results = {
         tables: 0,
         objects: 0,
@@ -119,118 +183,133 @@ export const pullCommand = new Command()
         pages: 0
       };
 
-      // Step 1: First fetch tables from Bizmanage API
-      const tablesSpinner = ora('Fetching tables from Bizmanage API...').start();
+      const shouldFetchTables = Array.from(selection.targets).some((target) => OBJECT_SCOPED_PULL_TARGETS.has(target));
       let tables: BizmanageTableResponse[] = [];
-      
-      try {
-        tables = await apiService.fetchTables();
-        results.tables = tables.length;
-        tablesSpinner.succeed(`${chalk.green('✓')} Tables: Found ${results.tables} tables`);
-        
-        if (tables.length === 0) {
-          serviceLogger.warn(chalk.yellow('⚠️  No tables found'));
-          serviceLogger.debug('This might indicate:');
-          serviceLogger.debug('   • No custom tables are configured');
-          serviceLogger.debug('   • API permissions might not include table access');
-          serviceLogger.debug('   • The endpoint might not be available on your instance');
-        }
-      } catch (error) {
-        tablesSpinner.fail(`${chalk.red('✗')} Failed to fetch tables`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
-        // Provide helpful error guidance for table fetching
-        if (errorMessage.includes('403') || errorMessage.includes('401')) {
-          serviceLogger.warn(chalk.yellow('💡 Authentication issue detected'));
-          serviceLogger.debug('Please check:');
-          serviceLogger.debug('   • API key is valid and not expired');
-          serviceLogger.debug('   • Instance URL is correct');
-          serviceLogger.debug('   • API key has required permissions');
-        } else if (errorMessage.includes('404')) {
-          serviceLogger.warn(chalk.yellow('💡 Endpoint not found'));
-          serviceLogger.debug('This might indicate:');
-          serviceLogger.debug('   • The API endpoint URL has changed');
-          serviceLogger.debug('   • Your instance might not support custom tables');
-        } else if (errorMessage.includes('timeout')) {
-          serviceLogger.warn(chalk.yellow('💡 Request timed out'));
-          serviceLogger.debug('Consider:');
-          serviceLogger.debug('   • Checking your internet connection');
-          serviceLogger.debug('   • Trying again in a moment');
-        }
-        
-        serviceLogger.error(chalk.red(`❌ Pull failed during table fetching: ${errorMessage}`));
-        process.exit(1);
-      }
 
-      // Step 2: Fetch full table definitions and process them
-      const objectsSpinner = ora('Fetching full table definitions...').start();
-      try {
-        const objects: Array<{
-          name: string;
-          definition: any;
-          actions: Array<{
-            name: string;
-            code?: string;
-            metadata: any;
-          }>;
-        }> = [];
-        
-        // Fetch full definition for each table
-        for (let i = 0; i < tables.length; i++) {
-          const table = tables[i];
-          const tableName = table.internal_name || table.display_name;
-          objectsSpinner.text = `Fetching definition for ${tableName} (${i + 1}/${tables.length})...`;
-          
-          try {
-            const fullDefinition = await apiService.fetchTableDefinition(tableName);
-            objects.push({
-              name: tableName,
-              definition: fullDefinition,
-              actions: [] // Actions will be fetched separately
-            });
-          } catch (error) {
-            objectsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch definition for ${tableName}`);
-          }
-        }
-        
-        objectsSpinner.text = `Processing objects (${objects.length} items)...`;
-        
-        if (objects.length === 0) {
-          objectsSpinner.warn(`${chalk.yellow('⚠️')} Objects: No objects to process`);
-        } else {
-          const objectResult = await projectService.writeObjectsWithRawDefinitions(projectPath, objects);
-          
-          if (objectResult.success) {
-            results.objects = objectResult.itemCount;
-            objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
+      if (shouldFetchTables) {
+        const tablesSpinner = ora('Fetching tables from Bizmanage API...').start();
+
+        try {
+          const fetchedTables = await apiService.fetchTables();
+          tables = selection.objectSelectors.length > 0
+            ? fetchedTables.filter((table) => matchesObjectSelector(table, selection.objectSelectors))
+            : fetchedTables;
+
+          results.tables = tables.length;
+
+          if (selection.objectSelectors.length > 0) {
+            tablesSpinner.succeed(`${chalk.green('✓')} Tables: Matched ${results.tables} of ${fetchedTables.length} tables`);
           } else {
-            objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
-            serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
-            process.exit(1);
+            tablesSpinner.succeed(`${chalk.green('✓')} Tables: Found ${results.tables} tables`);
           }
+
+          if (tables.length === 0) {
+            serviceLogger.warn(chalk.yellow('⚠️  No tables matched the current pull selection'));
+          }
+        } catch (error) {
+          tablesSpinner.fail(`${chalk.red('✗')} Failed to fetch tables`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          if (errorMessage.includes('403') || errorMessage.includes('401')) {
+            serviceLogger.warn(chalk.yellow('💡 Authentication issue detected'));
+            serviceLogger.debug('Please check:');
+            serviceLogger.debug('   • API key is valid and not expired');
+            serviceLogger.debug('   • Instance URL is correct');
+            serviceLogger.debug('   • API key has required permissions');
+          } else if (errorMessage.includes('404')) {
+            serviceLogger.warn(chalk.yellow('💡 Endpoint not found'));
+            serviceLogger.debug('This might indicate:');
+            serviceLogger.debug('   • The API endpoint URL has changed');
+            serviceLogger.debug('   • Your instance might not support custom tables');
+          } else if (errorMessage.includes('timeout')) {
+            serviceLogger.warn(chalk.yellow('💡 Request timed out'));
+            serviceLogger.debug('Consider:');
+            serviceLogger.debug('   • Checking your internet connection');
+            serviceLogger.debug('   • Trying again in a moment');
+          }
+
+          serviceLogger.error(chalk.red(`❌ Pull failed during table fetching: ${errorMessage}`));
+          process.exit(1);
         }
-      } catch (error) {
-        objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
-        process.exit(1);
       }
 
-      // Step 3: Fetch fields for each table
+      if (selection.targets.has('objects')) {
+        const objectsSpinner = ora('Fetching full table definitions...').start();
+
+        try {
+          const objects: Array<{
+            name: string;
+            definition: any;
+            actions: Array<{
+              name: string;
+              code?: string;
+              metadata: any;
+            }>;
+          }> = [];
+
+          for (let i = 0; i < tables.length; i++) {
+            const table = tables[i];
+            const tableName = table.internal_name || table.display_name;
+            objectsSpinner.text = `Fetching definition for ${tableName} (${i + 1}/${tables.length})...`;
+
+            try {
+              const fullDefinition = await apiService.fetchTableDefinition(tableName);
+              objects.push({
+                name: tableName,
+                definition: fullDefinition,
+                actions: []
+              });
+            } catch (error) {
+              objectsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch definition for ${tableName}`);
+            }
+          }
+
+          objectsSpinner.text = `Processing objects (${objects.length} items)...`;
+
+          if (objects.length === 0) {
+            objectsSpinner.succeed(`${chalk.green('✓')} Objects: 0 items processed`);
+          } else {
+            const objectResult = await projectService.writeObjectsWithRawDefinitions(projectPath, objects);
+
+            if (objectResult.success) {
+              results.objects = objectResult.itemCount;
+              objectsSpinner.succeed(`${chalk.green('✓')} Objects: ${results.objects} items processed`);
+            } else {
+              objectsSpinner.fail(`${chalk.red('✗')} Objects: ${objectResult.errors.join(', ')}`);
+              serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${objectResult.errors.join(', ')}`));
+              process.exit(1);
+            }
+          }
+        } catch (error) {
+          objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
+          process.exit(1);
+        }
+      }
+
       let totalFields = 0;
-      if (tables.length > 0) {
+      if (selection.targets.has('fields') && tables.length > 0) {
         const fieldsSpinner = ora('Fetching fields for tables...').start();
+
         try {
           for (let i = 0; i < tables.length; i++) {
             const table = tables[i];
             const tableName = table.internal_name || table.display_name;
             fieldsSpinner.text = `Fetching fields for ${tableName} (${i + 1}/${tables.length})...`;
-            
+
             try {
               const fields = await apiService.fetchFields(tableName);
-              
-              if (fields.length > 0) {
-                const fieldResult = await projectService.writeFields(projectPath, tableName, fields);
+              const filteredFields = selection.fieldSelectors.length > 0
+                ? fields.filter((field) => matchesScopedSelector(
+                  selection.fieldSelectors,
+                  [table.internal_name, table.display_name],
+                  [field.internal_name, field.name, field.label]
+                ))
+                : fields;
+
+              if (filteredFields.length > 0) {
+                const fieldResult = await projectService.writeFields(projectPath, tableName, filteredFields);
                 if (fieldResult.success) {
                   totalFields += fieldResult.itemCount;
                 } else {
@@ -238,11 +317,10 @@ export const pullCommand = new Command()
                 }
               }
             } catch (error) {
-              // Don't fail the entire pull if one table's fields can't be fetched
               fieldsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch fields for ${tableName}`);
             }
           }
-          
+
           fieldsSpinner.succeed(`${chalk.green('✓')} Fields: ${totalFields} fields processed across ${tables.length} tables`);
         } catch (error) {
           fieldsSpinner.fail(`${chalk.red('✗')} Failed to process fields`);
@@ -252,21 +330,28 @@ export const pullCommand = new Command()
         }
       }
 
-      // Step 4: Fetch actions for each table
       let totalActions = 0;
-      if (tables.length > 0) {
+      if (selection.targets.has('actions') && tables.length > 0) {
         const actionsSpinner = ora('Fetching actions for tables...').start();
+
         try {
           for (let i = 0; i < tables.length; i++) {
             const table = tables[i];
             const tableName = table.internal_name || table.display_name;
             actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tables.length})...`;
-            
+
             try {
               const actions = await apiService.fetchActions(tableName);
-              
-              if (actions.length > 0) {
-                const actionResult = await projectService.writeActions(projectPath, tableName, actions);
+              const filteredActions = selection.actionSelectors.length > 0
+                ? actions.filter((action) => matchesScopedSelector(
+                  selection.actionSelectors,
+                  [table.internal_name, table.display_name],
+                  [action.name, action.metadata.action_name, action.metadata.title]
+                ))
+                : actions;
+
+              if (filteredActions.length > 0) {
+                const actionResult = await projectService.writeActions(projectPath, tableName, filteredActions);
                 if (actionResult.success) {
                   totalActions += actionResult.itemCount;
                 } else {
@@ -274,11 +359,10 @@ export const pullCommand = new Command()
                 }
               }
             } catch (error) {
-              // Don't fail the entire pull if one table's actions can't be fetched
               actionsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch actions for ${tableName}`);
             }
           }
-          
+
           actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tables.length} tables`);
         } catch (error) {
           actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
@@ -288,76 +372,99 @@ export const pullCommand = new Command()
         }
       }
 
-      // Pull reports
-      const reportsSpinner = ora('Fetching reports...').start();
-      try {
-        const reports = await apiService.fetchReports();
-        reportsSpinner.text = `Processing reports (${reports.length} items)...`;
-        
-        const reportResult = await projectService.writeReports(projectPath, reports);
-        
-        if (reportResult.success) {
-          results.reports = reportResult.itemCount;
-          reportsSpinner.succeed(`${chalk.green('✓')} Reports: ${results.reports} items processed`);
-        } else {
-          reportsSpinner.fail(`${chalk.red('✗')} Reports: ${reportResult.errors.join(', ')}`);
-          serviceLogger.error(chalk.red(`❌ Pull failed during reports processing: ${reportResult.errors.join(', ')}`));
+      if (selection.targets.has('reports')) {
+        const reportsSpinner = ora('Fetching reports...').start();
+
+        try {
+          const reports = await apiService.fetchReports();
+          const filteredReports = selection.reportSelectors.length > 0
+            ? reports.filter((report) => matchesAnySelector(
+              selection.reportSelectors,
+              [report.name, report.metadata.internal_name, report.metadata.display_name]
+            ))
+            : reports;
+
+          reportsSpinner.text = `Processing reports (${filteredReports.length} items)...`;
+
+          const reportResult = await projectService.writeReports(projectPath, filteredReports);
+
+          if (reportResult.success) {
+            results.reports = reportResult.itemCount;
+            reportsSpinner.succeed(`${chalk.green('✓')} Reports: ${results.reports} items processed`);
+          } else {
+            reportsSpinner.fail(`${chalk.red('✗')} Reports: ${reportResult.errors.join(', ')}`);
+            serviceLogger.error(chalk.red(`❌ Pull failed during reports processing: ${reportResult.errors.join(', ')}`));
+            process.exit(1);
+          }
+        } catch (error) {
+          reportsSpinner.fail(`${chalk.red('✗')} Failed to fetch reports`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during reports fetching: ${errorMessage}`));
           process.exit(1);
         }
-      } catch (error) {
-        reportsSpinner.fail(`${chalk.red('✗')} Failed to fetch reports`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.error(chalk.red(`❌ Pull failed during reports fetching: ${errorMessage}`));
-        process.exit(1);
       }
 
-      // Pull pages
-      const pagesSpinner = ora('Fetching pages...').start();
-      try {
-        const pages = await apiService.fetchPages();
-        pagesSpinner.text = `Processing pages (${pages.length} items)...`;
-        
-        const pageResult = await projectService.writePages(projectPath, pages);
-        
-        if (pageResult.success) {
-          results.pages = pageResult.itemCount;
-          pagesSpinner.succeed(`${chalk.green('✓')} Pages: ${results.pages} items processed`);
-        } else {
-          pagesSpinner.fail(`${chalk.red('✗')} Pages: ${pageResult.errors.join(', ')}`);
-          serviceLogger.error(chalk.red(`❌ Pull failed during pages processing: ${pageResult.errors.join(', ')}`));
+      if (selection.targets.has('pages')) {
+        const pagesSpinner = ora('Fetching pages...').start();
+
+        try {
+          const pages = await apiService.fetchPages();
+          const filteredPages = selection.pageSelectors.length > 0
+            ? pages.filter((page) => matchesAnySelector(
+              selection.pageSelectors,
+              [page.name, page.metadata.name, page.metadata.url]
+            ))
+            : pages;
+
+          pagesSpinner.text = `Processing pages (${filteredPages.length} items)...`;
+
+          const pageResult = await projectService.writePages(projectPath, filteredPages);
+
+          if (pageResult.success) {
+            results.pages = pageResult.itemCount;
+            pagesSpinner.succeed(`${chalk.green('✓')} Pages: ${results.pages} items processed`);
+          } else {
+            pagesSpinner.fail(`${chalk.red('✗')} Pages: ${pageResult.errors.join(', ')}`);
+            serviceLogger.error(chalk.red(`❌ Pull failed during pages processing: ${pageResult.errors.join(', ')}`));
+            process.exit(1);
+          }
+        } catch (error) {
+          pagesSpinner.fail(`${chalk.red('✗')} Failed to fetch pages`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during pages fetching: ${errorMessage}`));
           process.exit(1);
         }
-      } catch (error) {
-        pagesSpinner.fail(`${chalk.red('✗')} Failed to fetch pages`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.error(chalk.red(`❌ Pull failed during pages fetching: ${errorMessage}`));
-        process.exit(1);
       }
 
-      // Pull backend scripts
-      const backendScriptsSpinner = ora('Fetching backend scripts...').start();
-      try {
-        const backendScripts = await apiService.fetchScripts();
-        backendScriptsSpinner.text = `Processing backend scripts (${backendScripts.length} items)...`;
-        
-        const scriptResult = await projectService.writeScripts(projectPath, backendScripts);
-        
-        if (scriptResult.success) {
-          results.backendScripts = scriptResult.itemCount;
-          backendScriptsSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
-        } else {
-          backendScriptsSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
-          serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
+      if (selection.targets.has('scripts')) {
+        const backendScriptsSpinner = ora('Fetching backend scripts...').start();
+
+        try {
+          const backendScripts = await apiService.fetchScripts();
+          const filteredScripts = selection.scriptSelectors.length > 0
+            ? backendScripts.filter((script) => matchesAnySelector(selection.scriptSelectors, [script.name]))
+            : backendScripts;
+
+          backendScriptsSpinner.text = `Processing backend scripts (${filteredScripts.length} items)...`;
+
+          const scriptResult = await projectService.writeScripts(projectPath, filteredScripts);
+
+          if (scriptResult.success) {
+            results.backendScripts = scriptResult.itemCount;
+            backendScriptsSpinner.succeed(`${chalk.green('✓')} Backend Scripts: ${results.backendScripts} items processed`);
+          } else {
+            backendScriptsSpinner.fail(`${chalk.red('✗')} Backend Scripts: ${scriptResult.errors.join(', ')}`);
+            serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts processing: ${scriptResult.errors.join(', ')}`));
+            process.exit(1);
+          }
+        } catch (error) {
+          backendScriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
           process.exit(1);
         }
-      } catch (error) {
-        backendScriptsSpinner.fail(`${chalk.red('✗')} Failed to fetch backend scripts`);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        serviceLogger.error(chalk.red(`❌ Pull failed during backend scripts fetching: ${errorMessage}`));
-        process.exit(1);
       }
 
-      // Update project config with pull timestamp
       try {
         await projectService.updateProjectConfig(projectPath, {
           project: {
@@ -368,20 +475,274 @@ export const pullCommand = new Command()
           }
         });
       } catch (error) {
-        // Non-fatal error
         serviceLogger.warn(chalk.yellow('⚠️  Failed to update project config timestamp'));
       }
 
-      // If we reach this point, everything succeeded
       serviceLogger.info('');
-      serviceLogger.info(chalk.green('🎉 Pull completed successfully!'));
-      
+      serviceLogger.info(chalk.green(selection.isSelective ? '🎉 Selective pull completed successfully!' : '🎉 Pull completed successfully!'));
+
       const totalItems = results.objects + results.backendScripts + results.reports + results.pages + totalFields + totalActions;
       serviceLogger.info(chalk.dim(`Total: ${totalItems} items (${results.tables} tables, ${results.objects} objects, ${totalFields} fields, ${totalActions} actions, ${results.backendScripts} scripts, ${results.reports} reports, ${results.pages} pages)`));
-      serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`))
-
+      serviceLogger.info(chalk.dim(`Files written to: ${projectPath}`));
     } catch (error) {
       serviceLogger.error(chalk.red(`❌ Pull failed: ${error instanceof Error ? error.message : 'Unknown error'}`));
       process.exit(1);
     }
   });
+
+function collectPullOptionValues(value: string, previous: string[]): string[] {
+  return previous.concat(
+    value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  );
+}
+
+function resolvePullSelection(options: PullCommandOptions): PullSelection {
+  const explicitTargets = normalizeTargets(options.include ?? []);
+  const hasExplicitTargets = explicitTargets.length > 0;
+
+  const objectSelectors = uniqueSelectors([...(options.object ?? []), ...(options.view ?? [])]);
+  const fieldSelectors = uniqueSelectors(options.field ?? []);
+  const actionSelectors = uniqueSelectors(options.action ?? []);
+  const reportSelectors = uniqueSelectors(options.report ?? []);
+  const pageSelectors = uniqueSelectors(options.page ?? []);
+  const scriptSelectors = uniqueSelectors(options.script ?? []);
+
+  const targets = new Set<PullTarget>(explicitTargets);
+
+  if (!hasExplicitTargets) {
+    if (fieldSelectors.length > 0) {
+      targets.add('fields');
+    }
+
+    if (actionSelectors.length > 0) {
+      targets.add('actions');
+    }
+
+    if (reportSelectors.length > 0) {
+      targets.add('reports');
+    }
+
+    if (pageSelectors.length > 0) {
+      targets.add('pages');
+    }
+
+    if (scriptSelectors.length > 0) {
+      targets.add('scripts');
+    }
+
+    if (targets.size === 0 && objectSelectors.length > 0) {
+      targets.add('objects');
+      targets.add('fields');
+      targets.add('actions');
+    }
+
+    if (targets.size === 0) {
+      for (const target of ALL_PULL_TARGETS) {
+        targets.add(target);
+      }
+    }
+  }
+
+  validatePullSelection({
+    targets,
+    objectSelectors,
+    fieldSelectors,
+    actionSelectors,
+    reportSelectors,
+    pageSelectors,
+    scriptSelectors
+  });
+
+  const isSelective = targets.size !== ALL_PULL_TARGETS.length
+    || objectSelectors.length > 0
+    || fieldSelectors.length > 0
+    || actionSelectors.length > 0
+    || reportSelectors.length > 0
+    || pageSelectors.length > 0
+    || scriptSelectors.length > 0;
+
+  return {
+    targets,
+    objectSelectors,
+    fieldSelectors,
+    actionSelectors,
+    reportSelectors,
+    pageSelectors,
+    scriptSelectors,
+    isSelective,
+    summary: buildSelectionSummary(targets, {
+      objectSelectors,
+      fieldSelectors,
+      actionSelectors,
+      reportSelectors,
+      pageSelectors,
+      scriptSelectors
+    })
+  };
+}
+
+function normalizeTargets(values: string[]): PullTarget[] {
+  const targets: PullTarget[] = [];
+
+  for (const value of values) {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (!normalizedValue || normalizedValue === 'all') {
+      continue;
+    }
+
+    const target = PULL_TARGET_ALIASES[normalizedValue];
+    if (!target) {
+      throw new Error(`Invalid pull target "${value}". Use objects, fields, actions, reports, pages, or scripts.`);
+    }
+
+    if (!targets.includes(target)) {
+      targets.push(target);
+    }
+  }
+
+  return targets;
+}
+
+function uniqueSelectors(values: string[]): string[] {
+  const seen = new Set<string>();
+  const selectors: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    selectors.push(trimmed);
+  }
+
+  return selectors;
+}
+
+function validatePullSelection(selection: Omit<PullSelection, 'isSelective' | 'summary'>): void {
+  if (selection.objectSelectors.length > 0 && !Array.from(selection.targets).some((target) => OBJECT_SCOPED_PULL_TARGETS.has(target))) {
+    throw new Error('Object/view selectors require pulling objects, fields, or actions.');
+  }
+
+  if (selection.fieldSelectors.length > 0 && !selection.targets.has('fields')) {
+    throw new Error('Field selectors require pulling fields.');
+  }
+
+  if (selection.actionSelectors.length > 0 && !selection.targets.has('actions')) {
+    throw new Error('Action selectors require pulling actions.');
+  }
+
+  if (selection.reportSelectors.length > 0 && !selection.targets.has('reports')) {
+    throw new Error('Report selectors require pulling reports.');
+  }
+
+  if (selection.pageSelectors.length > 0 && !selection.targets.has('pages')) {
+    throw new Error('Page selectors require pulling pages.');
+  }
+
+  if (selection.scriptSelectors.length > 0 && !selection.targets.has('scripts')) {
+    throw new Error('Script selectors require pulling backend scripts.');
+  }
+}
+
+function buildSelectionSummary(
+  targets: Set<PullTarget>,
+  selectors: Pick<PullSelection, 'objectSelectors' | 'fieldSelectors' | 'actionSelectors' | 'reportSelectors' | 'pageSelectors' | 'scriptSelectors'>
+): string {
+  const parts = [`targets=${Array.from(targets).join(', ')}`];
+
+  if (selectors.objectSelectors.length > 0) {
+    parts.push(`objects=${selectors.objectSelectors.join(', ')}`);
+  }
+
+  if (selectors.fieldSelectors.length > 0) {
+    parts.push(`fields=${selectors.fieldSelectors.join(', ')}`);
+  }
+
+  if (selectors.actionSelectors.length > 0) {
+    parts.push(`actions=${selectors.actionSelectors.join(', ')}`);
+  }
+
+  if (selectors.reportSelectors.length > 0) {
+    parts.push(`reports=${selectors.reportSelectors.join(', ')}`);
+  }
+
+  if (selectors.pageSelectors.length > 0) {
+    parts.push(`pages=${selectors.pageSelectors.join(', ')}`);
+  }
+
+  if (selectors.scriptSelectors.length > 0) {
+    parts.push(`scripts=${selectors.scriptSelectors.join(', ')}`);
+  }
+
+  return parts.join(' | ');
+}
+
+function matchesObjectSelector(table: BizmanageTableResponse, selectors: string[]): boolean {
+  return matchesAnySelector(selectors, [table.internal_name, table.display_name]);
+}
+
+function matchesScopedSelector(selectors: string[], scopeCandidates: Array<string | undefined>, itemCandidates: Array<string | undefined>): boolean {
+  return selectors.some((selector) => {
+    const { scope, name } = splitScopedSelector(selector);
+
+    if (scope) {
+      return matchesAnySelector([scope], scopeCandidates) && matchesAnySelector([name], itemCandidates);
+    }
+
+    return matchesAnySelector([name], itemCandidates);
+  });
+}
+
+function splitScopedSelector(value: string): { scope?: string; name: string } {
+  for (const separator of [':', '.']) {
+    const index = value.indexOf(separator);
+    if (index > 0 && index < value.length - 1) {
+      return {
+        scope: value.slice(0, index).trim(),
+        name: value.slice(index + 1).trim()
+      };
+    }
+  }
+
+  return { name: value.trim() };
+}
+
+function matchesAnySelector(selectors: string[], candidates: Array<string | undefined>): boolean {
+  return selectors.some((selector) => matchesSingleSelector(selector, candidates));
+}
+
+function matchesSingleSelector(selector: string, candidates: Array<string | undefined>): boolean {
+  const selectorValues = getComparableValues(selector);
+
+  return candidates.some((candidate) => {
+    const candidateValues = getComparableValues(candidate);
+    return selectorValues.some((value) => candidateValues.includes(value));
+  });
+}
+
+function getComparableValues(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const normalized = normalizeLocalName(trimmed);
+  const raw = trimmed.toLowerCase();
+
+  return normalized === raw ? [raw] : [raw, normalized];
+}

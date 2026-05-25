@@ -20,7 +20,7 @@ export interface PushError {
 
 export type PushCustomizationType = 'object' | 'action' | 'field' | 'backend-script' | 'report' | 'page';
 
-interface CustomizationFile {
+export interface CustomizationFile {
   filePath: string;
   relativePath: string;
   type: PushCustomizationType;
@@ -534,89 +534,29 @@ export class PushService {
    * Push only changed files to the platform
    */
   async pushChangedFiles(projectPath: string): Promise<PushResult> {
-    const result: PushResult = {
-      success: true,
-      pushedFiles: [],
-      skippedFiles: [],
-      errors: []
-    };
-
-    try {
-      const changedFiles = await this.getChangedFiles(projectPath);
-
-      if (changedFiles.length === 0) {
-        this.serviceLogger.debug('No changed files to push');
-        return result;
-      }
-
-      this.serviceLogger.debug('Pushing changed files', { count: changedFiles.length });
-
-      // Push each file
-      for (const file of changedFiles) {
-        try {
-          await this.pushCustomization(file);
-          result.pushedFiles.push(file.relativePath);
-          
-          // Update hash after successful push
-          await this.hashCache.updateHash(projectPath, file.filePath, file.content);
-          
-        } catch (error) {
-          result.success = false;
-          result.errors.push({
-            file: file.relativePath,
-            type: file.type,
-            message: error instanceof Error ? error.message : 'Unknown error'
-          });
-          this.serviceLogger.error('Failed to push file', {
-            file: file.relativePath,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
-      }
-
-      // Save hash cache after all pushes
-      await this.hashCache.save();
-
-    } catch (error) {
-      result.success = false;
-      result.errors.push({
-        file: 'project',
-        type: 'system',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-
-    return result;
+    const changedFiles = await this.getChangedFiles(projectPath);
+    return this.pushFiles(projectPath, changedFiles);
   }
 
   /**
    * Push all files in the project (bypass change detection)
    */
   async pushAllFiles(projectPath: string): Promise<PushResult> {
-    const result: PushResult = {
-      success: true,
-      pushedFiles: [],
-      skippedFiles: [],
-      errors: []
-    };
+    const allFiles = await this.getAllFiles(projectPath);
+    return this.pushFiles(projectPath, allFiles);
+  }
 
+  async getAllFiles(projectPath: string): Promise<CustomizationFile[]> {
     const srcPath = path.join(projectPath, 'src');
     if (!await fs.pathExists(srcPath)) {
-      result.success = false;
-      result.errors.push({
-        file: projectPath,
-        type: 'project',
-        message: 'Not a valid project - src directory not found'
-      });
-      return result;
+      throw new Error('Not a valid project - src directory not found');
     }
 
-    // Collect all files
     const allFiles: CustomizationFile[] = [];
-    
+
     const scanDir = async (dir: string) => {
       if (!await fs.pathExists(dir)) return;
-      
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -640,33 +580,66 @@ export class PushService {
     };
 
     await scanDir(srcPath);
+    this.serviceLogger.debug('Collected all pushable files', { count: allFiles.length });
+    return allFiles;
+  }
 
-    this.serviceLogger.debug('Pushing all files', { count: allFiles.length });
+  async pushFiles(projectPath: string, files: CustomizationFile[]): Promise<PushResult> {
+    const result: PushResult = {
+      success: true,
+      pushedFiles: [],
+      skippedFiles: [],
+      errors: []
+    };
 
-    // Initialize hash cache
-    await this.hashCache.initialize(projectPath);
-
-    // Push each file
-    for (const file of allFiles) {
-      try {
-        await this.pushCustomization(file);
-        result.pushedFiles.push(file.relativePath);
-        
-        // Update hash after successful push
-        await this.hashCache.updateHash(projectPath, file.filePath, file.content);
-        
-      } catch (error) {
+    try {
+      const srcPath = path.join(projectPath, 'src');
+      if (!await fs.pathExists(srcPath)) {
         result.success = false;
         result.errors.push({
-          file: file.relativePath,
-          type: file.type,
-          message: error instanceof Error ? error.message : 'Unknown error'
+          file: projectPath,
+          type: 'project',
+          message: 'Not a valid project - src directory not found'
         });
+        return result;
       }
-    }
 
-    // Save hash cache after all pushes
-    await this.hashCache.save();
+      if (files.length === 0) {
+        this.serviceLogger.debug('No files to push after filtering');
+        return result;
+      }
+
+      this.serviceLogger.debug('Pushing selected files', { count: files.length });
+      await this.hashCache.initialize(projectPath);
+
+      for (const file of files) {
+        try {
+          await this.pushCustomization(file);
+          result.pushedFiles.push(file.relativePath);
+          await this.hashCache.updateHash(projectPath, file.filePath, file.content);
+        } catch (error) {
+          result.success = false;
+          result.errors.push({
+            file: file.relativePath,
+            type: file.type,
+            message: error instanceof Error ? error.message : 'Unknown error'
+          });
+          this.serviceLogger.error('Failed to push file', {
+            file: file.relativePath,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      await this.hashCache.save();
+    } catch (error) {
+      result.success = false;
+      result.errors.push({
+        file: 'project',
+        type: 'system',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
 
     return result;
   }
