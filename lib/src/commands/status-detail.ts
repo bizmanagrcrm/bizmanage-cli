@@ -95,7 +95,7 @@ export const statusDetailCommand = new Command()
         
         // Test tables endpoint
         try {
-          console.log(chalk.dim('Testing /cust-fields/tables endpoint...'));
+          console.log(chalk.dim('Testing /restapi/customization/tables?custom_fields=true&real_tables_only=true&changed_only=true endpoint...'));
           const tables = await apiService.fetchTables();
           const systemTables = tables.filter(t => t.system).length;
           const customTables = tables.filter(t => !t.system).length;

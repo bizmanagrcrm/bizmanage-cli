@@ -330,7 +330,7 @@ export class ApiService {
     try {
       await this.applyDelay();
       this.serviceLogger.debug('Fetching tables from Bizmanage API');
-      const response = await this.client.get('/restapi/customization/tables?custom_fields=true&real_tables_only=true');
+      const response = await this.client.get('/restapi/customization/tables?custom_fields=true&real_tables_only=true&changed_only=true');
       this.serviceLogger.debug(`Fetched ${response.data.length} tables`);
       return response.data;
     } catch (error: any) {
@@ -341,13 +341,13 @@ export class ApiService {
 
   /**
    * Fetch full table definition by internal name
-   * Endpoint: GET /restapi/customization/tables?internal_name=[table name]
+   * Endpoint: GET /restapi/customization/tables?internal_name=[table name]&real_tables_only=true&changed_only=true
    */
   async fetchTableDefinition(tableName: string): Promise<any> {
     try {
       await this.applyDelay();
       this.serviceLogger.debug(`Fetching table definition for: ${tableName}`);
-      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}&real_tables_only=true`);
+      const response = await this.client.get(`/restapi/customization/tables?internal_name=${tableName}&real_tables_only=true&changed_only=true`);
       
       // Response should be an array with one item, or a single object
       const tableData = Array.isArray(response.data) ? response.data[0] : response.data;
@@ -377,12 +377,13 @@ export class ApiService {
 
   /**
    * Fetch fields for a specific table
+   * Endpoint: GET /restapi/customization/fields/:table_name?changed_only=true
    */
   async fetchFields(tableName: string): Promise<BizmanageField[]> {
     try {
       await this.applyDelay();
       this.serviceLogger.debug(`Fetching fields for table: ${tableName}`);
-      const response = await this.client.get(`/restapi/customization/fields/${tableName}`);
+      const response = await this.client.get(`/restapi/customization/fields/${tableName}?changed_only=true`);
       this.serviceLogger.debug(`Fetched ${response.data.length} fields for ${tableName}`);
       
       // Remove id from each field response
@@ -400,14 +401,14 @@ export class ApiService {
 
   /**
    * Fetch actions for a specific table
-   * Endpoint: GET /restapi/customization/actions/:table_name
+   * Endpoint: GET /restapi/customization/actions/:table_name?changed_only=true
    * Response format: { display_name: string, menus: BizmanageActionResponse[] }
    */
   async fetchActions(tableName: string): Promise<BizmanageAction[]> {
     try {
       await this.applyDelay();
       this.serviceLogger.debug(`Fetching actions for table: ${tableName}`);
-      const response = await this.client.get(`/restapi/customization/actions/${tableName}`);
+      const response = await this.client.get(`/restapi/customization/actions/${tableName}?changed_only=true`);
       
       // Response is an object with { display_name, menus } where menus contains the actions
       const responseData = response.data;

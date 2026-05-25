@@ -7,7 +7,7 @@ This document describes the implementation of the Bizmanage CLI pull command wit
 ### ✅ Implemented
 - **Authentication**: Full authentication system with API key management
 - **Project Structure**: Complete project file system structure implementation
-- **Tables/Objects API**: Integration with `/cust-fields/tables?custom_fields=true` endpoint
+- **Tables/Objects API**: Integration with `/restapi/customization/tables?custom_fields=true&real_tables_only=true&changed_only=true` endpoint
 - **Error Handling**: Comprehensive error handling with helpful guidance
 - **Project Initialization**: `bizmanage init` command to create new projects
 - **Status Commands**: Both simple and detailed status reporting
@@ -26,22 +26,27 @@ This document describes the implementation of the Bizmanage CLI pull command wit
 ### Current Implementation
 
 #### Tables/Objects
-- **Endpoint**: `GET /cust-fields/tables?custom_fields=true`
+- **Endpoint**: `GET /restapi/customization/tables?custom_fields=true&real_tables_only=true&changed_only=true`
 - **Status**: ✅ Implemented
-- **Response**: Array of table objects with metadata, filters, and configuration
+- **Response**: Array of changed table/view objects with metadata, filters, and configuration
 - **Mapped To**: Project structure under `src/objects/`
 
 ### Future Endpoints Needed
 
 #### Table Fields
-- **Endpoint**: `GET /cust-fields/tables/{tableId}/fields` (TBD)
-- **Purpose**: Get detailed field definitions for each table
+- **Endpoint**: `GET /restapi/customization/fields/{tableName}?changed_only=true`
+- **Purpose**: Get changed field definitions for each table without pulling system-defined fields
 - **Will Map To**: `definition.json` field definitions
 
 #### Custom Actions
-- **Endpoint**: `GET /custom-actions?table={tableName}` (TBD)
-- **Purpose**: Get JavaScript actions associated with tables
+- **Endpoint**: `GET /restapi/customization/actions/{tableName}?changed_only=true`
+- **Purpose**: Get changed JavaScript actions associated with tables
 - **Will Map To**: `src/objects/{table}/actions/` directory
+
+#### Single Table/Object Definition
+- **Endpoint**: `GET /restapi/customization/tables?internal_name={tableName}&real_tables_only=true&changed_only=true`
+- **Purpose**: Get the changed definition for a single table/view during pull
+- **Will Map To**: `src/objects/{table}/definition.json`
 
 #### Backend Scripts
 - **Endpoint**: `GET /backend-scripts` (TBD)
