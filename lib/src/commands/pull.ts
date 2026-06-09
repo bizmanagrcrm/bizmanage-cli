@@ -195,6 +195,7 @@ export const pullCommand = new Command()
         }>;
       }>();
       const tablesWithFields = new Set<string>();
+      const tablesWithActions = new Set<string>();
 
       if (shouldFetchTables) {
         const tablesSpinner = ora('Fetching tables from Bizmanage API...').start();
@@ -316,16 +317,60 @@ export const pullCommand = new Command()
         }
       }
 
+      let totalActions = 0;
+      if (selection.targets.has('actions') && tables.length > 0) {
+        const actionsSpinner = ora('Fetching actions for tables...').start();
+
+        try {
+          for (let i = 0; i < tables.length; i++) {
+            const table = tables[i];
+            const tableName = table.internal_name || table.display_name;
+            actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tables.length})...`;
+
+            try {
+              const actions = await apiService.fetchActions(tableName);
+              const filteredActions = selection.actionSelectors.length > 0
+                ? actions.filter((action) => matchesScopedSelector(
+                  selection.actionSelectors,
+                  [table.internal_name, table.display_name],
+                  [action.name, action.metadata.action_name, action.metadata.title]
+                ))
+                : actions;
+
+              if (filteredActions.length > 0) {
+                tablesWithActions.add(tableName);
+                const actionResult = await projectService.writeActions(projectPath, tableName, filteredActions);
+                if (actionResult.success) {
+                  totalActions += actionResult.itemCount;
+                } else {
+                  actionsSpinner.warn(`${chalk.yellow('⚠️')} Failed to write actions for ${tableName}`);
+                }
+              }
+            } catch (error) {
+              actionsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch actions for ${tableName}`);
+            }
+          }
+
+          actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tables.length} tables`);
+        } catch (error) {
+          actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          serviceLogger.error(chalk.red(`❌ Pull failed during actions processing: ${errorMessage}`));
+          process.exit(1);
+        }
+      }
+
       if (selection.targets.has('objects')) {
         const objectsSpinner = ora('Writing object definitions...').start();
 
         try {
+          const shouldLimitObjectsToChangedChildren = selection.targets.has('fields') || selection.targets.has('actions');
           const objectsToWrite = Array.from(objectsByTable.values()).filter((objectItem) => {
-            if (!selection.targets.has('fields')) {
+            if (!shouldLimitObjectsToChangedChildren) {
               return true;
             }
 
-            return tablesWithFields.has(objectItem.name);
+            return tablesWithFields.has(objectItem.name) || tablesWithActions.has(objectItem.name);
           });
 
           objectsSpinner.text = `Processing objects (${objectsToWrite.length} items)...`;
@@ -348,52 +393,6 @@ export const pullCommand = new Command()
           objectsSpinner.fail(`${chalk.red('✗')} Failed to process objects`);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           serviceLogger.error(chalk.red(`❌ Pull failed during object processing: ${errorMessage}`));
-          process.exit(1);
-        }
-      }
-
-      let totalActions = 0;
-      if (selection.targets.has('actions') && tables.length > 0) {
-        const actionsSpinner = ora('Fetching actions for tables...').start();
-
-        try {
-          const tablesForActions = selection.targets.has('fields')
-            ? tables.filter((table) => tablesWithFields.has(table.internal_name || table.display_name))
-            : tables;
-
-          for (let i = 0; i < tablesForActions.length; i++) {
-            const table = tablesForActions[i];
-            const tableName = table.internal_name || table.display_name;
-            actionsSpinner.text = `Fetching actions for ${tableName} (${i + 1}/${tablesForActions.length})...`;
-
-            try {
-              const actions = await apiService.fetchActions(tableName);
-              const filteredActions = selection.actionSelectors.length > 0
-                ? actions.filter((action) => matchesScopedSelector(
-                  selection.actionSelectors,
-                  [table.internal_name, table.display_name],
-                  [action.name, action.metadata.action_name, action.metadata.title]
-                ))
-                : actions;
-
-              if (filteredActions.length > 0) {
-                const actionResult = await projectService.writeActions(projectPath, tableName, filteredActions);
-                if (actionResult.success) {
-                  totalActions += actionResult.itemCount;
-                } else {
-                  actionsSpinner.warn(`${chalk.yellow('⚠️')} Failed to write actions for ${tableName}`);
-                }
-              }
-            } catch (error) {
-              actionsSpinner.warn(`${chalk.yellow('⚠️')} Could not fetch actions for ${tableName}`);
-            }
-          }
-
-          actionsSpinner.succeed(`${chalk.green('✓')} Actions: ${totalActions} actions processed across ${tablesForActions.length} tables`);
-        } catch (error) {
-          actionsSpinner.fail(`${chalk.red('✗')} Failed to process actions`);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          serviceLogger.error(chalk.red(`❌ Pull failed during actions processing: ${errorMessage}`));
           process.exit(1);
         }
       }

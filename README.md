@@ -419,7 +419,7 @@ bizmanage pull [options]
 
 Targets and selectors can be repeated or passed as comma-separated values.
 
-When pulling fields, objects/views with no returned fields are skipped so the CLI does not create empty object folders for them.
+When pulling fields and actions, objects/views with no returned fields or actions are skipped so the CLI does not create empty object folders for them, but action-only tables still get written.
 
 **Example:**
 ```bash
