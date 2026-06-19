@@ -77,45 +77,11 @@ export class PushService {
     await this.hashCache.initialize(projectPath);
     const changes = await this.hashCache.getChanges(projectPath);
 
-    const changedFiles: CustomizationFile[] = [];
-
-    // Process changed files
-    for (const files of Object.values(changes.changed)) {
-      for (const relPath of files) {
-        const fullPath = path.join(projectPath, relPath);
-        const type = this.detectType(fullPath);
-        
-        if (type) {
-          const content = await fs.readFile(fullPath, 'utf8');
-          changedFiles.push({
-            filePath: fullPath,
-            relativePath: relPath,
-            type,
-            content,
-            metadata: await this.loadMetadata(fullPath, type)
-          });
-        }
-      }
-    }
-
-    // Process new files
-    for (const files of Object.values(changes.new)) {
-      for (const relPath of files) {
-        const fullPath = path.join(projectPath, relPath);
-        const type = this.detectType(fullPath);
-        
-        if (type) {
-          const content = await fs.readFile(fullPath, 'utf8');
-          changedFiles.push({
-            filePath: fullPath,
-            relativePath: relPath,
-            type,
-            content,
-            metadata: await this.loadMetadata(fullPath, type)
-          });
-        }
-      }
-    }
+    const relPaths = [
+      ...Object.values(changes.changed).flat(),
+      ...Object.values(changes.new).flat()
+    ];
+    const changedFiles = await this.collectFiles(projectPath, relPaths);
 
     this.serviceLogger.debug('Found changed files', { count: changedFiles.length });
     return changedFiles;
@@ -599,7 +565,7 @@ export class PushService {
       throw new Error('Not a valid project - src directory not found');
     }
 
-    const allFiles: CustomizationFile[] = [];
+    const relPaths: string[] = [];
 
     const scanDir = async (dir: string) => {
       if (!await fs.pathExists(dir)) return;
@@ -612,21 +578,14 @@ export class PushService {
         } else if (entry.isFile() && !entry.name.startsWith('.')) {
           const type = this.detectType(fullPath);
           if (type) {
-            const content = await fs.readFile(fullPath, 'utf8');
-            const relPath = path.relative(projectPath, fullPath);
-            allFiles.push({
-              filePath: fullPath,
-              relativePath: relPath,
-              type,
-              content,
-              metadata: await this.loadMetadata(fullPath, type)
-            });
+            relPaths.push(path.relative(projectPath, fullPath));
           }
         }
       }
     };
 
     await scanDir(srcPath);
+    const allFiles = await this.collectFiles(projectPath, relPaths);
     this.serviceLogger.debug('Collected all pushable files', { count: allFiles.length });
     return allFiles;
   }
@@ -668,7 +627,7 @@ export class PushService {
         try {
           await this.pushCustomization(file);
           result.pushedFiles.push(file.relativePath);
-          await this.hashCache.updateHash(projectPath, file.filePath, file.content);
+          await this.updatePushedFileHashes(projectPath, file);
         } catch (error) {
           result.success = false;
           result.errors.push({
@@ -712,6 +671,95 @@ export class PushService {
         return 60;
       case 'data':
         return 100;
+    }
+  }
+
+  private async collectFiles(projectPath: string, relPaths: string[]): Promise<CustomizationFile[]> {
+    const seen = new Set<string>();
+    const files: CustomizationFile[] = [];
+
+    for (const relPath of relPaths) {
+      const normalizedRelPath = relPath.replace(/\//g, path.sep);
+      if (seen.has(normalizedRelPath)) {
+        continue;
+      }
+
+      seen.add(normalizedRelPath);
+
+      const fullPath = path.join(projectPath, normalizedRelPath);
+      const type = this.detectType(fullPath);
+
+      if (!type || !await fs.pathExists(fullPath)) {
+        continue;
+      }
+
+      const content = await fs.readFile(fullPath, 'utf8');
+      files.push({
+        filePath: fullPath,
+        relativePath: normalizedRelPath,
+        type,
+        content,
+        metadata: await this.loadMetadata(fullPath, type)
+      });
+    }
+
+    return this.deduplicatePageFiles(files);
+  }
+
+  private deduplicatePageFiles(files: CustomizationFile[]): CustomizationFile[] {
+    const deduplicated: CustomizationFile[] = [];
+    const pageIndexByKey = new Map<string, number>();
+
+    for (const file of files) {
+      if (file.type !== 'page') {
+        deduplicated.push(file);
+        continue;
+      }
+
+      const pageKey = this.getPageBasePath(file.relativePath);
+      const existingIndex = pageIndexByKey.get(pageKey);
+
+      if (existingIndex === undefined) {
+        pageIndexByKey.set(pageKey, deduplicated.length);
+        deduplicated.push(file);
+        continue;
+      }
+
+      const existingFile = deduplicated[existingIndex];
+      deduplicated[existingIndex] = this.preferPagePushFile(existingFile, file);
+    }
+
+    return deduplicated;
+  }
+
+  private preferPagePushFile(left: CustomizationFile, right: CustomizationFile): CustomizationFile {
+    if (left.filePath.endsWith('.html') || right.filePath.endsWith('.json')) {
+      return left;
+    }
+
+    return right;
+  }
+
+  private getPageBasePath(filePath: string): string {
+    return filePath.replace(/\.(html|json)$/i, '');
+  }
+
+  private async updatePushedFileHashes(projectPath: string, file: CustomizationFile): Promise<void> {
+    if (file.type !== 'page') {
+      await this.hashCache.updateHash(projectPath, file.filePath, file.content);
+      return;
+    }
+
+    const pageBasePath = this.getPageBasePath(file.filePath);
+    const pageFiles = [`${pageBasePath}.html`, `${pageBasePath}.json`];
+
+    for (const pageFilePath of pageFiles) {
+      if (!await fs.pathExists(pageFilePath)) {
+        continue;
+      }
+
+      const pageContent = await fs.readFile(pageFilePath, 'utf8');
+      await this.hashCache.updateHash(projectPath, pageFilePath, pageContent);
     }
   }
 }

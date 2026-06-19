@@ -1074,13 +1074,25 @@ export class ApiService {
       // Remove id from metadata if present
       const { id, ...metadataWithoutId } = metadata as any;
       
-      // Build payload with url, name, content, and default publihsed to true
-      const payload = {
+      // Preserve page-level settings that are round-tripped by pull.
+      const payload: Record<string, any> = {
         url: metadataWithoutId.url,
         name: metadataWithoutId.name,
         content: content,
         publihsed: metadataWithoutId.publihsed !== undefined ? metadataWithoutId.publihsed : true
       };
+
+      if (metadataWithoutId.data !== undefined) {
+        payload.data = metadataWithoutId.data;
+      }
+
+      if (metadataWithoutId.access_policy !== undefined) {
+        payload.access_policy = metadataWithoutId.access_policy;
+      }
+
+      if (metadataWithoutId.render_type !== undefined) {
+        payload.render_type = metadataWithoutId.render_type;
+      }
       
       this.serviceLogger.debug('Pushing page', { 
         url: payload.url,
