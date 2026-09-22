@@ -14,6 +14,7 @@
     "start": "node bin/index.js",
     "test": "echo 'Tests passed - CLI functionality verified'",
     "test:real": "jest",
+    "test:docs-snapshot": "npm run build && node --test tests/docs-snapshot-contract.test.mjs",
     "lint": "echo 'Linting passed - TypeScript compilation validates syntax'",
     "lint:fix": "echo 'No lint fixes needed'",
     "prepare": "npm run build",
