@@ -159,7 +159,7 @@ export const PageMetadataSchema = z.object({
   version: z.number().optional().describe('Page version'),
   publihsed: z.boolean().optional().describe('Whether page is published (note: typo in API)'),
   data: z.any().optional().describe('Page data object'),
-  access_policy: z.string().optional().describe('Access policy for the page'),
+  access_policy: z.string().nullable().optional().describe('Access policy for the page'),
   render_type: z.string().optional().describe('How the page should be rendered'),
   max_version: z.number().optional().describe('Maximum version number')
 });

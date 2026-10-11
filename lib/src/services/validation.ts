@@ -378,7 +378,8 @@ export class ValidationService {
       result.valid = false;
     }
 
-    if (!content.type || content.type.trim() === '') {
+    if (!(content.system === true && content.type == null) &&
+        (typeof content.type !== 'string' || content.type.trim() === '')) {
       result.errors.push({
         file: filePath,
         type: 'field',
