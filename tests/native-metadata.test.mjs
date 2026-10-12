@@ -177,3 +177,111 @@ test('compiled CLI rejects an invalid custom type with the field validation erro
   assert.equal(result.status, 1);
   assert.match(result.stdout + result.stderr, /Field type is required/);
 });
+
+test('public API declarations accept native metadata without weakening custom field types', async t => {
+  const root = await fixture(t, {});
+  const apiPath = path.relative(root, path.resolve('dist/services/api.js')).replaceAll(path.sep, '/');
+  const source = `import type { BizmanageField, BizmanagePageResponse } from ${JSON.stringify(apiPath)};
+const nativeOmitted: BizmanageField = { internal_name: 'p_group', system: true };
+const nativeNull: BizmanageField = { internal_name: 'contact', system: true, type: null };
+const custom: BizmanageField = { name: 'custom', label: 'Custom', type: 'input', system: false };
+const legacyCustom: BizmanageField = { name: 'custom', label: 'Custom', type: 'input', extra: 7 };
+const page: BizmanagePageResponse = {
+  id: 1, name: 'Page', content: '<main>Page</main>', version: 1, publihsed: true, access_policy: null
+};
+function inspectCustom(field: BizmanageField) {
+  if (field.system !== true) {
+    const type: string = field.type;
+    const name: string = field.name;
+    const label: string = field.label;
+  }
+}
+// @ts-expect-error Custom fields still require type.
+const missingType: BizmanageField = { name: 'custom', label: 'Custom' };
+// @ts-expect-error Custom field type is not nullable.
+const nullType: BizmanageField = { name: 'custom', label: 'Custom', type: null };
+// @ts-expect-error Custom field type must be a string.
+const numericType: BizmanageField = { name: 'custom', label: 'Custom', type: 7 };
+// @ts-expect-error Non-native fields still require name.
+const missingName: BizmanageField = { label: 'Custom', type: 'input' };
+// @ts-expect-error Non-native fields still require label.
+const missingLabel: BizmanageField = { name: 'custom', type: 'input' };
+// @ts-expect-error Native fields cannot supply a numeric type.
+const invalidNative: BizmanageField = { name: 'native', label: 'Native', system: true, type: 7 };
+// @ts-expect-error The index signature must not erase the known name type.
+const invalidName: BizmanageField = { name: 7, label: 'Custom', type: 'input' };
+`;
+  const file = path.join(root, 'public-api-types.mts');
+  await fs.writeFile(file, source);
+  const compiled = spawnSync(process.execPath, [path.resolve('node_modules/typescript/bin/tsc'),
+    '--noEmit', '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', 'Node16',
+    '--moduleResolution', 'Node16', file], { encoding: 'utf8' });
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
+test('fetched native fields validate and push unchanged without invented type or labels', async t => {
+  const api = ownedService(t, new ApiService(config));
+  const raw = [
+    { id: 1, internal_name: 'p_group', system: true, alias: 'Project Group' },
+    { id: 2, internal_name: 'contact', system: true, type: null, alias: 'Primary Contact' }
+  ];
+  let getCount = 0;
+  api.client.get = async url => {
+    assert.equal(url, '/restapi/customization/fields/projects?changed_only=true');
+    getCount++;
+    return { status: 200, data: raw };
+  };
+  const fields = await api.fetchFields('projects');
+  assert.deepEqual(fields, raw.map(({ id, ...field }) => field));
+  assert.equal(getCount, 1);
+  const root = await fixture(t, Object.fromEntries(fields.map(field =>
+    [`src/objects/projects/fields/${field.internal_name}.json`, field])));
+  const validator = ownedService(t, new ValidationService());
+  const requests = capture(api);
+  for (const field of fields) {
+    const file = path.join(root, 'src/objects/projects/fields', field.internal_name + '.json');
+    assert.equal((await validator.validateFile(file)).valid, true);
+    await api.pushFieldDefinition('projects', field);
+  }
+  assert.deepEqual(requests.map(request => ({ url: request.url, payload: request.payload })),
+    fields.map(field => ({ url: '/restapi/customization/field-by-internal-name',
+      payload: { table: 'projects', ...field } })));
+});
+
+test('fetched null and blank page policies validate and push unchanged', async t => {
+  const api = ownedService(t, new ApiService(config));
+  const raw = [
+    { id: 1, name: 'Null Policy', url: 'null-policy', content: '<main>Null Policy</main>',
+      version: 1, publihsed: false, access_policy: null },
+    { id: 2, name: 'Blank Policy', url: 'blank-policy', content: '<main>Blank Policy</main>',
+      version: 1, publihsed: true, access_policy: '', render_type: 'standalone' }
+  ];
+  let getCount = 0;
+  api.client.get = async url => {
+    assert.equal(url, '/restapi/admin/custom-pages/all');
+    getCount++;
+    return { status: 200, data: raw };
+  };
+  const pages = await api.fetchPages();
+  assert.equal(getCount, 1);
+  assert.equal(pages.length, 2);
+  const root = await fixture(t, Object.fromEntries(pages.flatMap(page => [
+    [`src/pages/${page.name}.json`, page.metadata], [`src/pages/${page.name}.html`, page.html]
+  ])));
+  const validator = ownedService(t, new ValidationService());
+  const requests = capture(api);
+  for (const [index, page] of pages.entries()) {
+    assert.equal(page.metadata.access_policy, raw[index].access_policy);
+    assert.equal(page.html, raw[index].content);
+    assert.equal(PageMetadataSchema.safeParse(page.metadata).success, true);
+    const file = path.join(root, 'src/pages', page.name + '.json');
+    assert.equal((await validator.validateFile(file)).valid, true);
+    await api.pushPage(page.metadata, page.html);
+  }
+  assert.deepEqual(requests.map(request => ({ url: request.url, payload: request.payload })),
+    raw.map(page => ({ url: '/restapi/custom-pages/by-url', payload: {
+      name: page.name, url: page.url, content: page.content, publihsed: page.publihsed,
+      access_policy: page.access_policy,
+      ...(page.render_type === undefined ? {} : { render_type: page.render_type })
+    } })));
+});
