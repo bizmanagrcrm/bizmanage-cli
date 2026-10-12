@@ -12,7 +12,7 @@
     "prestart": "npm run build",
     "dev": "tsc --watch",
     "start": "node bin/index.js",
-    "test": "echo 'Tests passed - CLI functionality verified'",
+    "test": "npm run build && node --test tests/native-metadata.test.mjs",
     "test:real": "jest",
     "lint": "echo 'Linting passed - TypeScript compilation validates syntax'",
     "lint:fix": "echo 'No lint fixes needed'",

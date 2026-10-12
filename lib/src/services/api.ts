@@ -61,11 +61,8 @@ export interface BizmanageScript {
 }
 
 // Actual API response interfaces
-export interface BizmanageField {
+interface BizmanageFieldCommon {
   internal_name?: string;
-  name: string;
-  label: string;
-  type: string;
   required?: boolean;
   default_value?: any;
   options?: string[];
@@ -75,6 +72,11 @@ export interface BizmanageField {
   updated_at?: number;
   [key: string]: any; // Allow for additional fields
 }
+
+export type BizmanageField = BizmanageFieldCommon & (
+  { system: true; name?: string; label?: string; type?: string | null } |
+  { system?: false; name: string; label: string; type: string }
+);
 
 export interface BizmanageTableResponse {
   system: boolean;
@@ -158,7 +160,7 @@ export interface BizmanagePageResponse {
   publihsed: boolean;
   name: string;
   data?: any;
-  access_policy?: string;
+  access_policy?: string | null;
   render_type?: string;
   url?: string;
   max_version?: number;
