@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial development setup
 
+## [2.1.3] - 2026-10-12
+
+### Fixed
+- Accept native system-field overrides without an explicit type; custom fields remain strictly validated.
+- Accept nullable custom-page access policies and align public API types with exported metadata.
+- Add build, type-contract and metadata round-trip regression tests.
+
 ## [1.0.0] - 2026-01-01
 
 ### Added
